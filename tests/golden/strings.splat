@@ -1,0 +1,8 @@
+name := "Ada"
+x := 3.14159
+squish "hello {name}, val = {x:.3}"
+squish "braces \{ literal \} and {f("nested {name}")} done"
+ch := c"a"
+nl := c"\n"
+wag count = 0
+count += 1

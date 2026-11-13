@@ -61,10 +61,15 @@ public static class Templates
         $"🕳️ COMMENT BLACK HOLE [Line {span.Line}]: A '#-' comment swallowed the rest of your file.",
         "Close the comment with '-#'.");
 
-    public static Diagnostic BadCharacter(SourceSpan span, char c) => new(
+    public static Diagnostic BadCharacter(SourceSpan span, char c, string? fix = null) => new(
         DiagnosticCategory.BadCharacter, span,
         $"👽 ALIEN GLYPH [Line {span.Line}]: Never seen '{c}' (U+{(int)c:X4}) in my life. SPLAT does not speak that.",
-        "Remove the character, or put it inside a string or comment.");
+        fix ?? "Remove the character, or put it inside a string or comment.");
+
+    public static Diagnostic BadLiteral(SourceSpan span, string problem, string fix) => new(
+        DiagnosticCategory.BadLiteral, span,
+        $"🤡 LITERALLY WRONG [Line {span.Line}]: {problem}",
+        fix);
 
     public static Diagnostic UndefinedName(SourceSpan span, string name) => new(
         DiagnosticCategory.UndefinedName, span,

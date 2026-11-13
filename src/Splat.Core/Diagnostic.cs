@@ -17,6 +17,7 @@ public enum DiagnosticCategory
     UnterminatedString,
     UnterminatedComment,
     BadCharacter,
+    BadLiteral,
     UndefinedName,
     WrongArgCount,
     DivideByZero,

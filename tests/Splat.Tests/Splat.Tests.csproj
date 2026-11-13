@@ -27,4 +27,8 @@
     <ProjectReference Include="..\..\src\Splat.Cli\Splat.Cli.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\golden\**\*.splat" Link="golden\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -183,7 +183,8 @@ public class TemplateTests
             Templates.TypeMismatch(At7, "a", "b"), Templates.UseAfterMove(At7, "x", 1),
             Templates.ZoneEscape(At7, "x", "z"), Templates.NanMeltdown(At7, 1), Templates.FileNotFound(At7, "p"),
             Templates.UnexpectedToken(At7, "}", "a statement"), Templates.UnterminatedString(At7),
-            Templates.UnterminatedComment(At7), Templates.BadCharacter(At7, '$'), Templates.UndefinedName(At7, "q"),
+            Templates.UnterminatedComment(At7), Templates.BadCharacter(At7, '$'), Templates.BadLiteral(At7, "bad", "fix"),
+            Templates.UndefinedName(At7, "q"),
             Templates.WrongArgCount(At7, "f", 1, 2), Templates.DivideByZero(At7), Templates.ImmutableAssign(At7, "x"),
             Templates.StackOverflow(At7, 1000), Templates.Internal(At7, "oops"),
         };
