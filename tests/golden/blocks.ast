@@ -1,0 +1,15 @@
+(cook add (params (a i32) (b i32 2)) (-> i32) (= (+ a b)))
+(cook
+  walk
+  (params (n i32))
+  (-> i32)
+  (block
+    (wag total 0)
+    (spin-in i (.. 0 n) (block (spin-in j (..= 0 i) (block (+= total (* i j))))))
+    (yeet total)))
+(bind x (call add 1))
+(bind y (: mid) 2.5)
+(wag z (: i64) 7)
+(-= z 3)
+(call squish (str "total " (interp (call walk 4)) " and " (interp y ".3")))
+(call yell "careful" x)

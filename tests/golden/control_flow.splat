@@ -1,0 +1,28 @@
+# hmm/meh/nah chains share one closing ';', spin in its three forms, bail/skip
+cook classify(n::i32)::txt:
+    hmm n < 0:
+        yeet "negative"
+    meh n == 0:
+        yeet "zero"
+    meh n < 10 and n % 2 == 0:
+        yeet "small even"
+    nah:
+        yeet "other"
+    ;
+;
+
+wag i = 0
+spin while i < 10:
+    i += 1
+    hmm i % 2 == 0:
+        skip
+    ;
+    hmm i > 7:
+        bail
+    ;
+    squish classify(i)
+;
+
+spin:
+    bail
+;

@@ -1,0 +1,16 @@
+# Generics, defaults, higher-order types, peek/poke params, pipes, member and index calls
+cook apply<T>(f::cook(T)::T, v::T)::T = f(v)
+cook norm_all<$R, $C>(m::mid[$R, $C], k::Maybe<Maybe<i32>>)::mid[?, 3] = m
+cook scale(me, by::mid = 1.5)::mid:
+    yeet by
+;
+cook peek_it(&me)::zip = ()
+cook poke_it(~me)::zip = ()
+cook op +(me, other::Vec2)::Vec2 = other
+cook op [](me, i::usz)::mid = 0.0
+
+r := 3 |> double |> add_one
+a := A[:, 0..3]
+b := obj.items[0].name
+c := -2 ** 2
+wag m::Maybe<i32>= f()

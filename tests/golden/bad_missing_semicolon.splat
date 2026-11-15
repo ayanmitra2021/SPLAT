@@ -1,0 +1,5 @@
+cook f(n::i32)::i32:
+    hmm n > 0:
+        yeet 1
+    ;
+    yeet 0

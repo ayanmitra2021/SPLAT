@@ -23,6 +23,11 @@ public enum DiagnosticCategory
     DivideByZero,
     ImmutableAssign,
     StackOverflow,
+    StraySemicolon,
+    OrphanBranch,
+    NotAssignable,
+    NotYetBuilt,
+    TooDeep,
     Internal,
 }
 

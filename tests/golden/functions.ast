@@ -1,0 +1,17 @@
+(cook apply (generics T) (params (f (cook-type (params T) T)) (v T)) (-> T) (= (call f v)))
+(cook
+  norm_all
+  (generics $R $C)
+  (params (m (tensor mid $R $C)) (k (Maybe (Maybe i32))))
+  (-> (tensor mid ? 3))
+  (= m))
+(cook scale (params me (by mid 1.5)) (-> mid) (block (yeet by)))
+(cook peek_it (params &me) (-> zip) (= ()))
+(cook poke_it (params ~me) (-> zip) (= ()))
+(cook op + (params me (other Vec2)) (-> Vec2) (= other))
+(cook op [] (params me (i usz)) (-> mid) (= 0.0))
+(bind r (|> (|> 3 double) add_one))
+(bind a (index A : (.. 0 3)))
+(bind b (. (index (. obj items) 0) name))
+(bind c (- (** 2 2)))
+(wag m (: (Maybe i32)) (call f))

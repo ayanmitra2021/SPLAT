@@ -96,6 +96,33 @@ public static class Templates
         $"🥞 STACK OVERFLOW [{Where(span)}]: {depth} calls deep and still going. Recursion has left the chat.",
         "Add a base case, or turn the recursion into a 'spin' loop.");
 
+    // ---- Parser structure errors ----
+
+    public static Diagnostic StraySemicolon(SourceSpan span) => new(
+        DiagnosticCategory.StraySemicolon, span,
+        $"🪦 ORPHAN SEMICOLON [Line {span.Line}]: This ';' is closing a block that was never opened. Nobody is home.",
+        "Delete the extra ';', or add the ':' that should have opened the block.");
+
+    public static Diagnostic OrphanBranch(SourceSpan span, string keyword) => new(
+        DiagnosticCategory.OrphanBranch, span,
+        $"🍂 ORPHAN BRANCH [Line {span.Line}]: '{keyword}' showed up with no 'hmm' to belong to.",
+        "Start the chain with 'hmm condition:', and keep 'nah' as the last branch.");
+
+    public static Diagnostic NotAssignable(SourceSpan span) => new(
+        DiagnosticCategory.NotAssignable, span,
+        $"🚫 NOT A SLOT [Line {span.Line}]: You can't assign to that. It is a value, not a place.",
+        "Assign to a variable ('x = ...'), an element ('a[i] = ...') or a field ('p.x = ...').");
+
+    public static Diagnostic NotYetBuilt(SourceSpan span, string construct, int phase) => new(
+        DiagnosticCategory.NotYetBuilt, span,
+        $"🏗️ HARD HAT AREA [Line {span.Line}]: '{construct}' hasn't been built yet (it arrives in Phase {phase}). The parser walked around it politely.",
+        $"Remove the '{construct}' construct for now.", Severity.Error);
+
+    public static Diagnostic TooDeep(SourceSpan span) => new(
+        DiagnosticCategory.TooDeep, span,
+        $"🪆 NESTING DOLL [Line {span.Line}]: This is nested so deeply the parser got dizzy and sat down.",
+        "Split the code into smaller functions or flatten the nesting.");
+
     public static Diagnostic Internal(SourceSpan span, string detail) => new(
         DiagnosticCategory.Internal, span,
         $"🔧 OUR BAD [{Where(span)}]: The compiler tripped over its own shoelaces: {detail}",
