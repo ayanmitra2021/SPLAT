@@ -154,7 +154,7 @@ public static class SourceFormatter
     private static string Named(Arg a) => a.Name is null ? Expr(a.Value) : a.Name + " = " + Expr(a.Value);
 
     private static string Lambda(LambdaExpr l) =>
-        (l.Params.Count == 0 ? "| |" : "|" + string.Join(", ", l.Params.Select(p => p.Name)) + "|") + " " + Expr(l.Body);
+        (l.Params.Count == 0 ? "| |" : "|" + string.Join(", ", l.Params.Select(p => p.Type is null ? p.Name : p.Name + "::" + Type(p.Type))) + "|") + " " + Expr(l.Body);
 
     private static string Wrap(Expr e, bool parens) => parens ? "(" + Expr(e) + ")" : Expr(e);
 

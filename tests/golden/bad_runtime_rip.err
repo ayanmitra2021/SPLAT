@@ -1,0 +1,13 @@
+[SE00305] ☠️ RIP [Line 3]: n got too big: 3
+  --> bad_runtime_rip.splat:3:9
+   |
+ 3 |         rip "n got too big: {n}"
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: 'rip' is unrecoverable by design; fix the condition that led here.
+  SPLAT stack trace (most recent call first):
+    at check  (called at bad_runtime_rip.splat:7:26)
+    at walk  (called at bad_runtime_rip.splat:7:37)
+    at walk  (called at bad_runtime_rip.splat:7:37)
+    at walk  (called at bad_runtime_rip.splat:7:37)
+    at walk  (called at bad_runtime_rip.splat:8:8)
+

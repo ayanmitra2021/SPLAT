@@ -18,6 +18,10 @@ public class DiagnosticCodeTests
         Templates.ImmutableAssign(S, "x"), Templates.StackOverflow(S, 1), Templates.StraySemicolon(S),
         Templates.OrphanBranch(S, "meh"), Templates.NotAssignable(S), Templates.NotYetBuilt(S, "mold", 8),
         Templates.TooDeep(S), Templates.Internal(S, "d"),
+        Templates.NotCallable(S, "i32"), Templates.BadOperator(S, "+", "a", "b", "f"), Templates.Redeclared(S, "x", 1),
+        Templates.LoopControlOutside(S, "bail"), Templates.YeetOutside(S), Templates.MissingReturn(S, "f", "i32"),
+        Templates.BadFormat(S, ".3", "p"), Templates.CannotInfer(S, "w", "f"), Templates.IntegerOverflow(S, "i32", "+"),
+        Templates.Panic(S, "m", null), Templates.BadConversion(S, "v", "i8"), Templates.MathDomain(S, "p"),
     ];
 
     [Fact]

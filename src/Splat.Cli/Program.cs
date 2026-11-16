@@ -1,12 +1,13 @@
-﻿using System.Text;
+using System.Text;
 using Splat.Core;
+using Splat.Runtime;
 using Splat.Syntax;
 
 namespace Splat.Cli;
 
 public static class Program
 {
-    public const string Version = "0.2.0-phase4";
+    public const string Version = "0.2.0-phase5";
 
     public static int Main(string[] args)
     {
@@ -15,12 +16,22 @@ public static class Program
         if (args.Length == 0 || args[0] is "--version" or "-v")
         {
             Console.WriteLine($"🍥 SPLAT {Version} - Strict, Portable, Linear-algebraic & AI Terse-language");
-            if (args.Length == 0) Console.WriteLine("REPL and 'run' arrive in later phases. Try 'splat tokens file.splat' or 'splat ast file.splat'.");
+            if (args.Length == 0) Console.WriteLine("The REPL arrives in Phase 6. Try 'splat run file.splat', 'splat check file.splat', 'splat tokens file.splat' or 'splat ast file.splat'.");
             return 0;
         }
 
         switch (args[0])
         {
+            case "run" when args.Length == 2:
+                return RunFile(args[1], checkOnly: false);
+            case "run":
+                Console.Error.WriteLine("Usage: splat run <file.splat>");
+                return 64;
+            case "check" when args.Length == 2:
+                return RunFile(args[1], checkOnly: true);
+            case "check":
+                Console.Error.WriteLine("Usage: splat check <file.splat>");
+                return 64;
             case "tokens" when args.Length == 2:
                 return DumpTokens(args[1]);
             case "tokens":
@@ -39,6 +50,29 @@ public static class Program
                 Console.Error.WriteLine($"Unknown command '{args[0]}'. See build_plan.md for what exists so far.");
                 return 64;
         }
+    }
+
+    /// <summary>Exit codes: 0 ok, 65 compile error, 66 file not found, 70 runtime error.</summary>
+    private static int RunFile(string path, bool checkOnly)
+    {
+        string text;
+        try { text = File.ReadAllText(path); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            var d = new DiagnosticEngine();
+            d.Report(Templates.FileNotFound(SourceSpan.None, path));
+            ConsolePrinter.ForStdErr().Print(d);
+            return 66;
+        }
+
+        var diag = new DiagnosticEngine();
+        var source = new SourceText(path, text);
+        var outcome = checkOnly
+            ? (Pipeline.Check(source, diag) ? RunOutcome.Ok : RunOutcome.CompileError)
+            : Pipeline.Run(source, diag, Console.Out, Console.Error);
+
+        if (outcome != RunOutcome.Ok) ConsolePrinter.ForStdErr().Print(diag);
+        return outcome switch { RunOutcome.Ok => 0, RunOutcome.CompileError => 65, _ => 70 };
     }
 
     private static int DumpTokens(string path)

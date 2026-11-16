@@ -128,7 +128,7 @@ public static class AstPrinter
         FullSlice => SNode.A(":"),
         MemberExpr m => SNode.L(".", [Expr(m.Target), SNode.A(m.Name)]),
         ListLiteral l => SNode.L("list", l.Items.Select(Expr)),
-        LambdaExpr l => SNode.L("lambda", [SNode.L("params", l.Params.Select(p => SNode.A(p.Name))), Expr(l.Body)]),
+        LambdaExpr l => SNode.L("lambda", [SNode.L("params", l.Params.Select(p => p.Type is null ? SNode.A(p.Name) : SNode.L(p.Name, [SNode.L(":", [Type(p.Type)])]))), Expr(l.Body)]),
         NormExpr n => SNode.L("norm", [SNode.A(NormText(n.Kind)), Expr(n.Operand)]),
         DerivExpr d => SNode.L("grad", [Expr(d.Function), Expr(d.Wrt)]),
         IntegExpr i => SNode.L("intg", [

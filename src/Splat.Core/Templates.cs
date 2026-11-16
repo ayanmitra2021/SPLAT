@@ -123,6 +123,72 @@ public static class Templates
         $"🪆 NESTING DOLL [Line {span.Line}]: This is nested so deeply the parser got dizzy and sat down.",
         "Split the code into smaller functions or flatten the nesting.");
 
+    // ---- Phase 5: type checker ----
+
+    public static Diagnostic NotCallable(SourceSpan span, string found) => new(
+        DiagnosticCategory.NotCallable, span,
+        $"📞 WRONG NUMBER [Line {span.Line}]: Tried to call a '{found}'. It does not pick up.",
+        "Only functions (cook declarations, lambdas, conversions like 'mid(x)') can be called.");
+
+    public static Diagnostic BadOperator(SourceSpan span, string op, string left, string? right, string fix) => new(
+        DiagnosticCategory.BadOperator, span,
+        right is null
+            ? $"🤹 WRONG TOOL [Line {span.Line}]: '{op}' has no idea what to do with a '{left}'."
+            : $"🤹 WRONG TOOL [Line {span.Line}]: '{op}' has no idea what to do with a '{left}' and a '{right}'.",
+        fix);
+
+    public static Diagnostic Redeclared(SourceSpan span, string name, int prevLine) => new(
+        DiagnosticCategory.Redeclared, span,
+        $"🪞 DOPPELGANGER [Line {span.Line}]: '{name}' already lives in this scope (declared on line {prevLine}). Two of you is one too many.",
+        $"Pick another name, or open a nested block to shadow '{name}'.");
+
+    public static Diagnostic LoopControlOutside(SourceSpan span, string keyword) => new(
+        DiagnosticCategory.LoopControlOutside, span,
+        $"🎢 NO RIDE [Line {span.Line}]: '{keyword}' only works inside a 'spin' loop, and you are not in one.",
+        $"Move '{keyword}' into a 'spin' body.");
+
+    public static Diagnostic YeetOutside(SourceSpan span) => new(
+        DiagnosticCategory.YeetOutside, span,
+        $"🏃 NOWHERE TO GO [Line {span.Line}]: 'yeet' returns from a function and there is no function here.",
+        "Use 'yeet' inside a 'cook', or delete it.");
+
+    public static Diagnostic MissingReturn(SourceSpan span, string function, string expected) => new(
+        DiagnosticCategory.MissingReturn, span,
+        $"🕳️ ENDS ABRUPTLY [Line {span.Line}]: '{function}' promises a '{expected}' but some path just stops talking.",
+        $"Make every path 'yeet' a '{expected}' (or end the body with a '{expected}' expression, and give 'hmm' chains a 'nah').");
+
+    public static Diagnostic BadFormat(SourceSpan span, string spec, string problem) => new(
+        DiagnosticCategory.BadFormat, span,
+        $"🎀 FORMAT FAUX PAS [Line {span.Line}]: The format spec '{spec}' {problem}.",
+        "Specs look like '.3' (precision, floats), '8' (width), '<8' '>8' '^8' (align), '08' (zero pad), 'x' 'X' 'b' 'o' (integer bases).");
+
+    public static Diagnostic CannotInfer(SourceSpan span, string what, string fix) => new(
+        DiagnosticCategory.CannotInfer, span,
+        $"🔮 CRYSTAL BALL BROKEN [Line {span.Line}]: Cannot work out {what}.",
+        fix);
+
+    // ---- Phase 5: runtime ----
+
+    public static Diagnostic IntegerOverflow(SourceSpan span, string type, string op) => new(
+        DiagnosticCategory.IntegerOverflow, span,
+        $"💣 OVERFLOW [{Where(span)}]: '{op}' pushed a '{type}' past its limits. Integers have edges, and you found one.",
+        "Use a wider type (for example i64), or check the operands first. SPLAT integer arithmetic is checked, never wrapping.");
+
+    public static Diagnostic Panic(SourceSpan span, string message, IReadOnlyList<string>? trace) => new(
+        DiagnosticCategory.Panic, span,
+        $"☠️ RIP [{Where(span)}]: {message}",
+        "'rip' is unrecoverable by design; fix the condition that led here.", Severity.Error, trace);
+
+    public static Diagnostic BadConversion(SourceSpan span, string value, string target) => new(
+        DiagnosticCategory.BadConversion, span,
+        $"🔄 LOST IN TRANSLATION [{Where(span)}]: {value} does not fit in a '{target}'.",
+        $"Check the range before converting to '{target}', or pick a wider type.");
+
+    public static Diagnostic MathDomain(SourceSpan span, string problem) => new(
+        DiagnosticCategory.MathDomain, span,
+        $"📉 MATH SAYS NO [{Where(span)}]: {problem}",
+        "Check the operands before the operation.");
+
     public static Diagnostic Internal(SourceSpan span, string detail) => new(
         DiagnosticCategory.Internal, span,
         $"🔧 OUR BAD [{Where(span)}]: The compiler tripped over its own shoelaces: {detail}",

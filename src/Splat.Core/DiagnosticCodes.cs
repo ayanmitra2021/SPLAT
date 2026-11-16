@@ -39,6 +39,14 @@ public static class DiagnosticCodes
         [DiagnosticCategory.WrongArgCount] = new(Severity.Error, 102),
         [DiagnosticCategory.ImmutableAssign] = new(Severity.Error, 103),
         [DiagnosticCategory.ShapeMismatch] = new(Severity.Error, 104),
+        [DiagnosticCategory.NotCallable] = new(Severity.Error, 105),
+        [DiagnosticCategory.BadOperator] = new(Severity.Error, 106),
+        [DiagnosticCategory.Redeclared] = new(Severity.Error, 107),
+        [DiagnosticCategory.LoopControlOutside] = new(Severity.Error, 108),
+        [DiagnosticCategory.YeetOutside] = new(Severity.Error, 109),
+        [DiagnosticCategory.MissingReturn] = new(Severity.Error, 110),
+        [DiagnosticCategory.BadFormat] = new(Severity.Error, 111),
+        [DiagnosticCategory.CannotInfer] = new(Severity.Error, 112),
         // ownership and zones
         [DiagnosticCategory.UseAfterMove] = new(Severity.Error, 200),
         [DiagnosticCategory.ZoneEscape] = new(Severity.Error, 201),
@@ -47,6 +55,10 @@ public static class DiagnosticCodes
         [DiagnosticCategory.StackOverflow] = new(Severity.Error, 301),
         [DiagnosticCategory.FileNotFound] = new(Severity.Error, 302),
         [DiagnosticCategory.NanMeltdown] = new(Severity.Error, 303),
+        [DiagnosticCategory.IntegerOverflow] = new(Severity.Error, 304),
+        [DiagnosticCategory.Panic] = new(Severity.Error, 305),
+        [DiagnosticCategory.BadConversion] = new(Severity.Error, 306),
+        [DiagnosticCategory.MathDomain] = new(Severity.Error, 307),
         // internal compiler faults
         [DiagnosticCategory.Internal] = new(Severity.Error, 90001),
     };

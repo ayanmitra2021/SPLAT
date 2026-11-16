@@ -1,0 +1,126 @@
+[SE00100] 🎭 IDENTITY CRISIS [Line 2]: Tried to shove a 'txt' into a 'i32' slot. I'm strictly typed, bestie.
+  --> bad_types.splat:2:10
+   |
+ 2 | a::i32 = "hello"
+   |          ^^^^^^^
+  Fix: Provide a value of type 'i32', or change the declared type to 'txt'.
+
+[SE00106] 🤹 WRONG TOOL [Line 3]: '+' has no idea what to do with a 'i32' and a 'txt'.
+  --> bad_types.splat:3:6
+   |
+ 3 | b := 1 + "one"
+   |      ^^^^^^^^^
+  Fix: Both sides of '+' must have the same type; convert one explicitly, or check the operand.
+
+[SE00106] 🤹 WRONG TOOL [Line 4]: '+' has no idea what to do with a 'i32' and a 'mid'.
+  --> bad_types.splat:4:6
+   |
+ 4 | c := 3 + 2.5
+   |      ^^^^^^^
+  Fix: There is no implicit conversion between 'i32' and 'mid'. Convert explicitly, for example 'i32(x)' or 'mid(y)'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 5]: Tried to shove a 'i32' into a 'mid' slot. I'm strictly typed, bestie.
+  --> bad_types.splat:5:10
+   |
+ 5 | d::mid = 42
+   |          ^^
+  Fix: Provide a value of type 'mid', or change the declared type to 'i32'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 6]: Tried to shove a 'i32' into a 'bit' slot. I'm strictly typed, bestie.
+  --> bad_types.splat:6:5
+   |
+ 6 | hmm 1:
+   |     ^
+  Fix: Provide a value of type 'bit', or change the declared type to 'i32'.
+
+[SE00102] 🧮 COUNT YOUR ARGS [Line 10]: 'f' wants 1 argument(s) but you handed it 2.
+  --> bad_types.splat:10:6
+    |
+ 10 | e := f(1, 2)
+    |      ^^^^^^^
+  Fix: Call 'f' with exactly 1 argument(s).
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 11]: Tried to shove a 'txt' into a 'i32' slot. I'm strictly typed, bestie.
+  --> bad_types.splat:11:8
+    |
+ 11 | g := f("s")
+    |        ^^^
+  Fix: Provide a value of type 'i32', or change the declared type to 'txt'.
+
+[SE00101] 🔍 WHO DIS [Line 12]: 'undefined_name' has never been introduced to me. Did you invent it in a dream?
+  --> bad_types.splat:12:6
+    |
+ 12 | h := undefined_name + 1
+    |      ^^^^^^^^^^^^^^
+  Fix: Declare 'undefined_name' with ':=' or 'wag' before using it, or check the spelling.
+
+[SE00106] 🤹 WRONG TOOL [Line 14]: '-' has no idea what to do with a 'u8'.
+  --> bad_types.splat:14:6
+    |
+ 14 | i := -u
+    |      ^^
+  Fix: Unsigned 'u8' cannot be negative; use a signed type such as i32 or i64.
+
+[SE00103] 🧊 FROZEN SOLID [Line 16]: 'x' was declared immutable and you tried to change it anyway.
+  --> bad_types.splat:16:1
+    |
+ 16 | x = 6
+    | ^
+  Fix: Declare it with 'wag x = ...' if it needs to change.
+
+[SE00110] 🕳️ ENDS ABRUPTLY [Line 17]: 'half' promises a 'i32' but some path just stops talking.
+  --> bad_types.splat:17:1
+    |
+ 17 | cook half(n::i32)::i32:
+    | ^^^^^^^^^^^^^^^^^^^^^^^...
+  Fix: Make every path 'yeet' a 'i32' (or end the body with a 'i32' expression, and give 'hmm' chains a 'nah').
+
+[SE00106] 🤹 WRONG TOOL [Line 22]: '!' has no idea what to do with a 'i32'.
+  --> bad_types.splat:22:6
+    |
+ 22 | j := !5
+    |      ^^
+  Fix: '!' flips a 'bit'. Compare first, for example 'x != 0'.
+
+[SE00006] 🤡 LITERALLY WRONG [Line 23]: 300 does not fit in a 'i8' (max 127).
+  --> bad_types.splat:23:9
+    |
+ 23 | k::i8 = 300
+    |         ^^^
+  Fix: Use a wider type.
+
+[SE00108] 🎢 NO RIDE [Line 24]: 'bail' only works inside a 'spin' loop, and you are not in one.
+  --> bad_types.splat:24:1
+    |
+ 24 | bail
+    | ^^^^
+  Fix: Move 'bail' into a 'spin' body.
+
+[SE00109] 🏃 NOWHERE TO GO [Line 25]: 'yeet' returns from a function and there is no function here.
+  --> bad_types.splat:25:1
+    |
+ 25 | yeet 1
+    | ^^^^^^
+  Fix: Use 'yeet' inside a 'cook', or delete it.
+
+[SE00112] 🔮 CRYSTAL BALL BROKEN [Line 26]: Cannot work out the return type of 'r', which calls itself.
+  --> bad_types.splat:26:18
+    |
+ 26 | cook r(n::i32) = r(n - 1)
+    |                  ^
+  Fix: Declare it: cook r(...)::T = ...
+
+[SE00111] 🎀 FORMAT FAUX PAS [Line 27]: The format spec '.2' sets a precision, which only floats (smol, mid, chonk) have, but this is a 'i32'.
+  --> bad_types.splat:27:12
+    |
+ 27 | m := "v = {x:.2}"
+    |            ^
+  Fix: Specs look like '.3' (precision, floats), '8' (width), '<8' '>8' '^8' (align), '08' (zero pad), 'x' 'X' 'b' 'o' (integer bases).
+
+[SE00006] 🤡 LITERALLY WRONG [Line 28]: 99999999999 does not fit in a 'i32' (max 2147483647).
+  --> bad_types.splat:28:6
+    |
+ 28 | n := 99999999999
+    |      ^^^^^^^^^^^
+  Fix: Annotate a wider type, for example 'x::i64 = ...'.
+

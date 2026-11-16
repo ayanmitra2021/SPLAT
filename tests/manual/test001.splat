@@ -1,1 +1,13 @@
-squish "Hello World"
+squish "Hello World - I am testing SPLAT myself"
+
+cook splat_func(text::txt)::i32:
+    wag n::i32 = 0
+    spin c in text:
+        hmm c == c"a" or c==c"e" or c==c"i" or c==c"o" or c==c"u":
+            n+=1
+        ;
+    ;
+    n
+;
+
+squish splat_func("hello its haloween!")

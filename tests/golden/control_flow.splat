@@ -12,7 +12,7 @@ cook classify(n::i32)::txt:
 ;
 
 wag i = 0
-spin while i < 10:
+spin while i < 20:
     i += 1
     hmm i % 2 == 0:
         skip

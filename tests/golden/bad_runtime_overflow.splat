@@ -1,0 +1,5 @@
+wag n::i32 = 2147483000
+spin i in 0..10:
+    n += 100
+    squish n
+;

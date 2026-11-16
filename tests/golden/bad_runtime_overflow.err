@@ -1,0 +1,7 @@
+[SE00304] 💣 OVERFLOW [Line 3]: '+' pushed a 'i32' past its limits. Integers have edges, and you found one.
+  --> bad_runtime_overflow.splat:3:5
+   |
+ 3 |     n += 100
+   |     ^^^^^^^^
+  Fix: Use a wider type (for example i64), or check the operands first. SPLAT integer arithmetic is checked, never wrapping.
+

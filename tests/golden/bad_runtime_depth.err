@@ -1,0 +1,20 @@
+[SE00301] 🥞 STACK OVERFLOW [Line 1]: 10000 calls deep and still going. Recursion has left the chat.
+  --> bad_runtime_depth.splat:1:29
+   |
+ 1 | cook forever(n::i32)::i32 = forever(n + 1) + 1
+   |                             ^^^^^^^^^^^^^^
+  Fix: Add a base case, or turn the recursion into a 'spin' loop.
+  SPLAT stack trace (most recent call first):
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at ... 9989 more calls ...
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:1:29)
+    at forever  (called at bad_runtime_depth.splat:2:8)
+

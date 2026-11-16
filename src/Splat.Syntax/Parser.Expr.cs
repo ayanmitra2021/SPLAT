@@ -215,7 +215,8 @@ public sealed partial class Parser
         while (!At(TokenKind.Pipe))
         {
             var n = Expect(TokenKind.Ident, "a lambda parameter name or the closing '|'");
-            ps.Add(new LambdaParam(n.Text, n.Span));
+            TypeRef? pt = Match(TokenKind.DoubleColon) ? ParseType() : null;
+            ps.Add(new LambdaParam(n.Text, pt, pt is null ? n.Span : _src.Join(n.Span, pt.Span)));
             if (!Match(TokenKind.Comma)) break;
         }
         Expect(TokenKind.Pipe, "'|' to close the lambda parameters");

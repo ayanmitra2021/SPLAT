@@ -77,7 +77,7 @@ public sealed record MemberExpr(Expr Target, string Name, SourceSpan NameSpan, S
 /// <summary>Bracket literal <c>[a, b, c]</c>; how it relates to tensors is decided in Phase 12.</summary>
 public sealed record ListLiteral(IReadOnlyList<Expr> Items, SourceSpan Span) : Expr(Span);
 
-public sealed record LambdaParam(string Name, SourceSpan Span) : Node(Span);
+public sealed record LambdaParam(string Name, TypeRef? Type, SourceSpan Span) : Node(Span);
 
 /// <summary><c>|a, b| body</c>. The body extends as far right as an expression can.</summary>
 public sealed record LambdaExpr(IReadOnlyList<LambdaParam> Params, Expr Body, SourceSpan Span) : Expr(Span);

@@ -28,6 +28,19 @@ public enum DiagnosticCategory
     NotAssignable,
     NotYetBuilt,
     TooDeep,
+    // Phase 5: type checker and interpreter
+    NotCallable,
+    BadOperator,
+    Redeclared,
+    LoopControlOutside,
+    YeetOutside,
+    MissingReturn,
+    BadFormat,
+    CannotInfer,
+    IntegerOverflow,
+    Panic,
+    BadConversion,
+    MathDomain,
     Internal,
 }
 
@@ -37,7 +50,8 @@ public sealed record Diagnostic(
     SourceSpan Span,
     string Message,
     string? Fix = null,
-    Severity Severity = Severity.Error)
+    Severity Severity = Severity.Error,
+    IReadOnlyList<string>? Trace = null)
 {
     /// <summary>Stable ID such as <c>SE00001</c> (error) or <c>SW00001</c> (warning); see <see cref="DiagnosticCodes"/>.</summary>
     public string Code => DiagnosticCodes.For(Category);

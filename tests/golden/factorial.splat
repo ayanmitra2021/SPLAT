@@ -1,0 +1,22 @@
+# Factorial, recursive and iterative, with checked i64 arithmetic
+cook fact(n::i64)::i64:
+    hmm n <= 1:
+        yeet 1
+    nah:
+        yeet n * fact(n - 1)
+    ;
+;
+
+cook fact_loop(n::i64)::i64:
+    wag acc::i64 = 1
+    spin i in 2..=n:
+        acc *= i
+    ;
+    acc
+;
+
+spin n in 0..=10:
+    squish "{n}! = {fact(i64(n))}"
+;
+squish "20! = {fact(20)}"
+squish "loop agrees: {fact_loop(20) == fact(20)}"

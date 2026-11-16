@@ -36,6 +36,11 @@ public sealed class ConsolePrinter
             if (source is not null) PrintSnippet(d.Span, source);
         }
         if (d.Fix is not null) _out.WriteLine($"  {Paint("Fix:", Cyan)} {d.Fix}");
+        if (d.Trace is { Count: > 0 })
+        {
+            _out.WriteLine($"  {Paint("SPLAT stack trace (most recent call first):", Cyan)}");
+            foreach (var frame in d.Trace) _out.WriteLine($"    at {frame}");
+        }
         _out.WriteLine();
     }
 
