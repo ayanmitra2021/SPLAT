@@ -1,0 +1,18 @@
+(bind model (guess (config (arg ridge 0.05)) X y))
+(bind lin (guess (config linear) (index X : (.. 0 3)) y))
+(bind clf (judge (config (call svm (arg kernel "rbf") (arg c 1.0))) X y))
+(bind pred (call model (& X_test)))
+(bind score (call (. clf acc) (& X_test) (& y_test)))
+(bind poly (guess (config (call poly (arg degree 3)) (arg ridge 0.1)) X y))
+(bind
+  msg
+  (str
+    "r2 = "
+    (interp (call (. model r2) (& X) (& y)) ".3")
+    " and loss "
+    (interp (norm 2 (- u v)) ".2")))
+(cook
+  train
+  (params (X (tensor mid $N $F)) (y (tensor mid $N)))
+  (-> mid)
+  (= (call (guess (config (arg ridge 0.01)) X y) (& X))))

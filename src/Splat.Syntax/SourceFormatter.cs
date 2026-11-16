@@ -144,8 +144,17 @@ public static class SourceFormatter
     {
         BinaryExpr b => Parser.TryGetBinary(b.Op, out int bp, out _) ? bp : 0,
         UnaryExpr => Parser.PrecUnary,
+        LambdaExpr or IntegExpr => 1,          // bodies run to the right as far as they can: always parenthesise as an operand
+        ReduceExpr => Parser.PrecReduceBody - 1, // body takes in '+ -', so it must be wrapped inside any arithmetic operator
         _ => int.MaxValue,
     };
+
+    private static int PrecReduceBody => Parser.PrecReduceBody;
+
+    private static string Named(Arg a) => a.Name is null ? Expr(a.Value) : a.Name + " = " + Expr(a.Value);
+
+    private static string Lambda(LambdaExpr l) =>
+        (l.Params.Count == 0 ? "| |" : "|" + string.Join(", ", l.Params.Select(p => p.Name)) + "|") + " " + Expr(l.Body);
 
     private static string Wrap(Expr e, bool parens) => parens ? "(" + Expr(e) + ")" : Expr(e);
 
@@ -180,6 +189,24 @@ public static class SourceFormatter
             case FullSlice: return ":";
             case MemberExpr m: return Wrap(m.Target, Prec(m.Target) < Parser.PrecPostfix) + "." + m.Name;
             case ListLiteral l: return "[" + string.Join(", ", l.Items.Select(Expr)) + "]";
+            case LambdaExpr l: return Lambda(l);
+            case NormExpr n:
+            {
+                var inner = Expr(n.Operand);
+                // keep adjacent bars from fusing into a norm opener/closer where they should not
+                string pad(string s, bool atStart) => s.Length > 0 && (atStart ? s[0] : s[^1]) == '|' ? " " : "";
+                var suffix = n.Kind switch { NormKind.L1 => "_1", NormKind.LInf => "_inf", NormKind.Frobenius => "_F", _ => "" };
+                return "||" + pad(inner, true) + inner + pad(inner, false) + "||" + suffix;
+            }
+            case DerivExpr d: return "grad(" + Expr(d.Function) + ", " + Expr(d.Wrt) + ")";
+            case IntegExpr i:
+                return "intg[" + string.Join(", ", i.Ranges.Select(Expr).Concat(i.Options.Select(Named))) + "] " + Lambda(i.Integrand);
+            case ReduceExpr r:
+                return (r.IsProduct ? "prod[" : "sum[") + r.Variable + " in " + Expr(r.Range) + "] " +
+                       Wrap(r.Body, Prec(r.Body) < PrecReduceBody);
+            case FitExpr f:
+                return (f.IsJudge ? "judge(" : "guess(") + string.Join(", ", f.Config.Select(Named)) + ") fit (" +
+                       Expr(f.Features) + ", " + Expr(f.Targets) + ")";
             default: return "(error)";
         }
     }

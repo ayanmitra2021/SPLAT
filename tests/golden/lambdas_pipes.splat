@@ -1,0 +1,12 @@
+# Lambdas, pipes, named arguments and the || disambiguation
+inc := |x| x + 1
+add := |a, b| a + b
+thunk := | | 42
+r := map(xs, |v| v ** 2)
+p := xs |> map(|v| v * 2) |> sum
+f := compose(inc, |y| y - 1, scale = 2)
+nested := |x| |y| x + y
+n := |x| ||x||
+both := ||a|| or ||b||
+cmp := |a| a < 3 and a > 0
+net := lin(In, 64) >> gelu >> drop(0.1) >> lin(64, Out)

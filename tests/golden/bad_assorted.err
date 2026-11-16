@@ -1,46 +1,46 @@
-🤨 WAIT WHAT [Line 1]: Found '+' where I wanted an expression. Were you typing with oven mitts?
+[SE00002] 🤨 WAIT WHAT [Line 1]: Found '+' where I wanted an expression. Were you typing with oven mitts?
   --> bad_assorted.splat:1:6
    |
  1 | x := + 1
    |      ^
   Fix: Replace '+' with an expression.
 
-🤨 WAIT WHAT [Line 4]: Found ':=' where I wanted ')' to close the parenthesis. Were you typing with oven mitts?
+[SE00002] 🤨 WAIT WHAT [Line 4]: Found ':=' where I wanted ')' to close the parenthesis. Were you typing with oven mitts?
   --> bad_assorted.splat:4:3
    |
  4 | z := 3
    |   ^^
   Fix: Replace ':=' with ')' to close the parenthesis.
 
-🍂 ORPHAN BRANCH [Line 5]: 'meh' showed up with no 'hmm' to belong to.
+[SE00008] 🍂 ORPHAN BRANCH [Line 5]: 'meh' showed up with no 'hmm' to belong to.
   --> bad_assorted.splat:5:1
    |
  5 | meh z > 1:
    | ^^^
   Fix: Start the chain with 'hmm condition:', and keep 'nah' as the last branch.
 
-🚫 NOT A SLOT [Line 8]: You can't assign to that. It is a value, not a place.
+[SE00009] 🚫 NOT A SLOT [Line 8]: You can't assign to that. It is a value, not a place.
   --> bad_assorted.splat:8:1
    |
  8 | 5 = 4
    | ^
   Fix: Assign to a variable ('x = ...'), an element ('a[i] = ...') or a field ('p.x = ...').
 
-🤨 WAIT WHAT [Line 10]: Found 'squish' where I wanted ':' to open the 'hmm' block. Were you typing with oven mitts?
+[SE00002] 🤨 WAIT WHAT [Line 10]: Found 'squish' where I wanted ':' to open the 'hmm' block. Were you typing with oven mitts?
   --> bad_assorted.splat:10:5
     |
  10 |     squish "no colon"
     |     ^^^^^^
   Fix: Replace 'squish' with ':' to open the 'hmm' block.
 
-🤨 WAIT WHAT [Line 12]: Found ':=' where I wanted '=' ('wag' variables use '=', not ':='). Bold choice.
+[SE00002] 🤨 WAIT WHAT [Line 12]: Found ':=' where I wanted '=' ('wag' variables use '=', not ':='). Bold choice.
   --> bad_assorted.splat:12:7
     |
  12 | wag w := 1
     |       ^^
   Fix: Replace ':=' with '=' ('wag' variables use '=', not ':=').
 
-🪦 ORPHAN SEMICOLON [Line 13]: This ';' is closing a block that was never opened. Nobody is home.
+[SE00007] 🪦 ORPHAN SEMICOLON [Line 13]: This ';' is closing a block that was never opened. Nobody is home.
   --> bad_assorted.splat:13:1
     |
  13 | ;

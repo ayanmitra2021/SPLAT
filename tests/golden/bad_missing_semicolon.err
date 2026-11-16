@@ -1,4 +1,4 @@
-💀 OOF [Line 1]: You opened a ':' and walked away like an unfinished text message. Expected ';' to close your thought, Shakespeare.
+[SE00001] 💀 OOF [Line 1]: You opened a ':' and walked away like an unfinished text message. Expected ';' to close your thought, Shakespeare.
   --> bad_missing_semicolon.splat:1:20
    |
  1 | cook f(n::i32)::i32:

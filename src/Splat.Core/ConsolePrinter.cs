@@ -29,7 +29,7 @@ public sealed class ConsolePrinter
 
     public void Print(Diagnostic d, SourceText? source)
     {
-        _out.WriteLine(Paint(d.Message, d.Severity == Severity.Error ? Red : Yellow));
+        _out.WriteLine(Paint($"[{d.Code}] {d.Message}", d.Severity == Severity.Error ? Red : Yellow));
         if (!d.Span.IsNone)
         {
             _out.WriteLine(Paint($"  --> {d.Span}", Cyan));

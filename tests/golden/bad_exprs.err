@@ -1,0 +1,49 @@
+[SE00002] 🤨 WAIT WHAT [Line 2]: Found 'b' where I wanted '||' to close the norm. The parser is concerned.
+  --> bad_exprs.splat:2:1
+   |
+ 2 | b := ∑[i 0..3] i
+   | ^
+  Fix: Replace 'b' with '||' to close the norm.
+
+[SE00002] 🤨 WAIT WHAT [Line 2]: Found '0' where I wanted 'in' after the loop variable. The parser is concerned.
+  --> bad_exprs.splat:2:10
+   |
+ 2 | b := ∑[i 0..3] i
+   |          ^
+  Fix: Replace '0' with 'in' after the loop variable.
+
+[SE00002] 🤨 WAIT WHAT [Line 3]: Found 'x' where I wanted a lambda like '|x| expr' after the integration ranges. Bold choice.
+  --> bad_exprs.splat:3:14
+   |
+ 3 | c := ∫[0..1] x
+   |              ^
+  Fix: Replace 'x' with a lambda like '|x| expr' after the integration ranges.
+
+[SE00002] 🤨 WAIT WHAT [Line 4]: Found '(' where I wanted 'fit' and the training data, as in 'fit (X, y)'. Were you typing with oven mitts?
+  --> bad_exprs.splat:4:23
+   |
+ 4 | d := guess(ridge = 1) (X, y)
+   |                       ^
+  Fix: Replace '(' with 'fit' and the training data, as in 'fit (X, y)'.
+
+[SE00002] 🤨 WAIT WHAT [Line 5]: Found ')' where I wanted ',' and the variable to differentiate by. The parser is concerned.
+  --> bad_exprs.splat:5:9
+   |
+ 5 | e := ∂(f)
+   |         ^
+  Fix: Replace ')' with ',' and the variable to differentiate by.
+
+[SE00002] 🤨 WAIT WHAT [Line 6]: Found '_zz' where I wanted a norm kind: '_1', '_2', '_inf' or '_F'. Bold choice.
+  --> bad_exprs.splat:6:11
+   |
+ 6 | f := ||x||_zz
+   |           ^^^
+  Fix: Replace '_zz' with a norm kind: '_1', '_2', '_inf' or '_F'.
+
+[SE00002] 🤨 WAIT WHAT [Line 8]: Found 'end of file' where I wanted '|' to close the lambda parameters. The parser is concerned.
+  --> bad_exprs.splat:8:1
+   |
+ 8 | 
+   | ^
+  Fix: Replace 'end of file' with '|' to close the lambda parameters.
+

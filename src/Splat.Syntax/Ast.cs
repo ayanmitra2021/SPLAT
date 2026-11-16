@@ -77,6 +77,28 @@ public sealed record MemberExpr(Expr Target, string Name, SourceSpan NameSpan, S
 /// <summary>Bracket literal <c>[a, b, c]</c>; how it relates to tensors is decided in Phase 12.</summary>
 public sealed record ListLiteral(IReadOnlyList<Expr> Items, SourceSpan Span) : Expr(Span);
 
+public sealed record LambdaParam(string Name, SourceSpan Span) : Node(Span);
+
+/// <summary><c>|a, b| body</c>. The body extends as far right as an expression can.</summary>
+public sealed record LambdaExpr(IReadOnlyList<LambdaParam> Params, Expr Body, SourceSpan Span) : Expr(Span);
+
+public enum NormKind { L2, L1, LInf, Frobenius }
+
+/// <summary><c>||v||</c> (L2), <c>||v||_1</c>, <c>||v||_inf</c>, <c>||A||_F</c>. Evaluated in Milestone 3.</summary>
+public sealed record NormExpr(Expr Operand, NormKind Kind, SourceSpan Span) : Expr(Span);
+
+/// <summary><c>∂(f, x)</c> / <c>grad(f, x)</c>. Evaluated in Milestone 4.</summary>
+public sealed record DerivExpr(Expr Function, Expr Wrt, SourceSpan Span) : Expr(Span);
+
+/// <summary><c>∫[a..b, c..d, tol = 1e-8] |x, y| body</c>. Each range is a <see cref="BinaryExpr"/> with <c>..</c>/<c>..=</c>.</summary>
+public sealed record IntegExpr(IReadOnlyList<Expr> Ranges, IReadOnlyList<Arg> Options, LambdaExpr Integrand, SourceSpan Span) : Expr(Span);
+
+/// <summary><c>∑[i in 0..N] body</c> or <c>∏[i in 0..N] body</c>.</summary>
+public sealed record ReduceExpr(bool IsProduct, string Variable, SourceSpan VariableSpan, Expr Range, Expr Body, SourceSpan Span) : Expr(Span);
+
+/// <summary><c>guess(ridge = 0.05) fit (X, y)</c> (regression) or <c>judge(svm(kernel = "rbf")) fit (X, y)</c> (classification).</summary>
+public sealed record FitExpr(bool IsJudge, IReadOnlyList<Arg> Config, Expr Features, Expr Targets, SourceSpan Span) : Expr(Span);
+
 /// <summary>Placeholder left where an expression failed to parse (already reported).</summary>
 public sealed record ErrorExpr(SourceSpan Span) : Expr(Span);
 

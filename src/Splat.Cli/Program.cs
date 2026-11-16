@@ -6,7 +6,7 @@ namespace Splat.Cli;
 
 public static class Program
 {
-    public const string Version = "0.2.0-phase3";
+    public const string Version = "0.2.0-phase4";
 
     public static int Main(string[] args)
     {
@@ -30,8 +30,10 @@ public static class Program
                 return DumpAst(args[1], formatSource: false);
             case "ast" when args.Length == 3 && args[1] == "--fmt":
                 return DumpAst(args[2], formatSource: true);
+            case "ast" when args.Length == 3 && args[1] == "-e":
+                return DumpExpression(args[2]);
             case "ast":
-                Console.Error.WriteLine("Usage: splat ast [--fmt] <file.splat>");
+                Console.Error.WriteLine("Usage: splat ast [--fmt] <file.splat>  |  splat ast -e \"<expression>\"");
                 return 64;
             default:
                 Console.Error.WriteLine($"Unknown command '{args[0]}'. See build_plan.md for what exists so far.");
@@ -83,6 +85,23 @@ public static class Program
         Console.Out.Write(formatSource ? SourceFormatter.Format(program) : AstPrinter.ProgramText(program));
 
         if (!diag.HasErrors) return 0;
+        ConsolePrinter.ForStdErr().Print(diag);
+        return 65;
+    }
+
+    /// <summary>Parses one expression from the command line and prints its s-expression on a single line.</summary>
+    private static int DumpExpression(string text)
+    {
+        var diag = new DiagnosticEngine();
+        var source = new SourceText("<expr>", text);
+        diag.AddSource(source);
+
+        var expr = Parser.ParseExpression(source, diag);
+        if (!diag.HasErrors)
+        {
+            Console.WriteLine(AstPrinter.Expr(expr).Flat());
+            return 0;
+        }
         ConsolePrinter.ForStdErr().Print(diag);
         return 65;
     }

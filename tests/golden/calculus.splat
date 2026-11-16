@@ -1,0 +1,17 @@
+# Calculus, reductions and norms
+area := ∫[0..1] |x| x ** 2
+area2 := intg[0..3.14159] |x| sin(x)
+vol := ∫[0..1, 0..2, tol = 1e-6] |x, y| x * y
+dg := ∂(f, x)
+dg2 := grad(|t| t ** 3, w)
+total := ∑[i in 0..10] i * i
+ascii := sum[i in 0..N] A[i] * B[i]
+fact := ∏[k in 1..=n] k
+nested := ∑[i in 0..n] ∑[j in 0..m] A[i, j]
+mixed := 2 * (∑[i in 0..3] i) + 1
+l2 := ||v||
+l1 := ||v||_1
+linf := ||v||_inf
+fro := ||A||_F ** 2
+dist := ||u - v|| < 0.5
+total2 := sum(v) + prod(w)

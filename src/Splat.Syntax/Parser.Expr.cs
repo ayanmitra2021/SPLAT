@@ -45,11 +45,13 @@ public sealed partial class Parser
 
     internal static int PrecUnary => BpUnary;
     internal static int PrecPostfix => BpPostfix;
+    internal static int PrecReduceBody => BpAdd;
 
     private static bool CanStartExpr(Token t) => t.Kind is
         TokenKind.Int or TokenKind.Float or TokenKind.String or TokenKind.Char or TokenKind.Ident or TokenKind.Yep
         or TokenKind.Nop or TokenKind.Me or TokenKind.Elder or TokenKind.LParen or TokenKind.LBracket
-        or TokenKind.Minus or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde;
+        or TokenKind.Minus or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde or TokenKind.Pipe
+        or TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod or TokenKind.Guess or TokenKind.Judge;
 
     private Expr ParseExpr(int minBp = 0)
     {
@@ -120,6 +122,20 @@ public sealed partial class Parser
             case TokenKind.Ident or TokenKind.Me or TokenKind.Elder:
                 Advance();
                 return new NameExpr(t.Text, t.Span);
+            case TokenKind.Pipe:
+                return AtNormOpen() ? ParseNorm() : ParseLambda();
+            case TokenKind.Grad when PeekTok().Kind == TokenKind.LParen:
+                return ParseDeriv();
+            case TokenKind.Intg when PeekTok().Kind == TokenKind.LBracket:
+                return ParseInteg();
+            case TokenKind.Sum or TokenKind.Prod when PeekTok().Kind == TokenKind.LBracket:
+                return ParseReduce();
+            case TokenKind.Guess or TokenKind.Judge:
+                return ParseFit();
+            case TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod:
+                // Not followed by '(' / '[': an ordinary name, so `sum(v)` and `map(xs, sum)` work.
+                Advance();
+                return new NameExpr(t.Text, t.Span);
             case TokenKind.Minus or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde:
             {
                 Advance();
@@ -154,8 +170,16 @@ public sealed partial class Parser
     private Expr ParseCall(Expr callee)
     {
         Advance(); // '('
+        var args = ParseArgs(TokenKind.RParen);
+        Expect(TokenKind.RParen, "')' to close the call");
+        return new CallExpr(callee, args, SpanFrom(callee.Span));
+    }
+
+    /// <summary>Comma-separated positional or named (<c>name = value</c>) arguments, up to (not including) <paramref name="close"/>.</summary>
+    private List<Arg> ParseArgs(TokenKind close)
+    {
         var args = new List<Arg>();
-        while (!At(TokenKind.RParen))
+        while (!At(close))
         {
             var start = Cur;
             if (At(TokenKind.Ident) && PeekTok().Kind == TokenKind.Assign)
@@ -172,8 +196,136 @@ public sealed partial class Parser
             }
             if (!Match(TokenKind.Comma)) break;
         }
-        Expect(TokenKind.RParen, "')' to close the call");
-        return new CallExpr(callee, args, SpanFrom(callee.Span));
+        return args;
+    }
+
+    // ---- lambdas and norms (both start with '|') ----
+
+    /// <summary>
+    /// Prefix '|' rule: two bars with no whitespace between them open a norm (<c>||v||</c>); otherwise the bar opens a
+    /// lambda (<c>|x| e</c>). A lambda with no parameters is written with a space: <c>| | e</c>.
+    /// </summary>
+    private bool AtNormOpen() =>
+        At(TokenKind.Pipe) && PeekTok() is { Kind: TokenKind.Pipe, SpaceBefore: false, NewlineBefore: false };
+
+    private Expr ParseLambda()
+    {
+        var open = Advance(); // '|'
+        var ps = new List<LambdaParam>();
+        while (!At(TokenKind.Pipe))
+        {
+            var n = Expect(TokenKind.Ident, "a lambda parameter name or the closing '|'");
+            ps.Add(new LambdaParam(n.Text, n.Span));
+            if (!Match(TokenKind.Comma)) break;
+        }
+        Expect(TokenKind.Pipe, "'|' to close the lambda parameters");
+        var body = ParseExpr();
+        return new LambdaExpr(ps, body, _src.Join(open.Span, body.Span));
+    }
+
+    private Expr ParseNorm()
+    {
+        var open = Advance();
+        Advance(); // the two opening bars
+        var inner = ParseExpr();
+        if (!AtNormOpen()) throw Fail(Cur, "'||' to close the norm");
+        Advance();
+        var close = Advance();
+
+        var kind = NormKind.L2;
+        var s = Cur;
+        if (s.Kind == TokenKind.Ident && !s.SpaceBefore && !s.NewlineBefore && s.Text.StartsWith('_'))
+        {
+            kind = s.Text switch
+            {
+                "_1" => NormKind.L1,
+                "_2" => NormKind.L2,
+                "_inf" => NormKind.LInf,
+                "_F" => NormKind.Frobenius,
+                _ => throw Fail(s, "a norm kind: '_1', '_2', '_inf' or '_F'"),
+            };
+            close = Advance();
+        }
+        return new NormExpr(inner, kind, _src.Join(open.Span, close.Span));
+    }
+
+    // ---- calculus, reductions, AI ----
+
+    /// <summary>∂(f, x) / grad(f, x). Without the '(' it is an ordinary name.</summary>
+    private Expr ParseDeriv()
+    {
+        var kw = Advance();
+        Expect(TokenKind.LParen, "'(' after 'grad'");
+        var fn = ParseExpr();
+        Expect(TokenKind.Comma, "',' and the variable to differentiate by");
+        var wrt = ParseExpr();
+        Expect(TokenKind.RParen, "')' to close grad(...)");
+        return new DerivExpr(fn, wrt, SpanFrom(kw));
+    }
+
+    /// <summary>∫[a..b, c..d, tol = 1e-8] |x, y| body</summary>
+    private Expr ParseInteg()
+    {
+        var kw = Advance();
+        Advance(); // '['
+        var ranges = new List<Expr>();
+        var options = new List<Arg>();
+        while (!At(TokenKind.RBracket))
+        {
+            var start = Cur;
+            if (At(TokenKind.Ident) && PeekTok().Kind == TokenKind.Assign)
+            {
+                Advance();
+                Advance();
+                var v = ParseExpr();
+                options.Add(new Arg(start.Text, v, SpanFrom(start)));
+            }
+            else
+            {
+                var r = ParseExpr();
+                if (r is not BinaryExpr { Op: TokenKind.DotDot or TokenKind.DotDotEq })
+                {
+                    _diag.Report(Templates.UnexpectedToken(r.Span, "an expression", "a range like 'a..b' to integrate over"));
+                    throw new ParseAbort();
+                }
+                ranges.Add(r);
+            }
+            if (!Match(TokenKind.Comma)) break;
+        }
+        Expect(TokenKind.RBracket, "']' to close the integration ranges");
+        if (ranges.Count == 0) throw Fail(Prev, "at least one range like 'a..b'");
+        if (!At(TokenKind.Pipe) || AtNormOpen()) throw Fail(Cur, "a lambda like '|x| expr' after the integration ranges");
+        var lambda = (LambdaExpr)ParseLambda();
+        return new IntegExpr(ranges, options, lambda, SpanFrom(kw));
+    }
+
+    /// <summary>∑[i in 0..N] body / ∏[...]. The body is parsed above the range/comparison levels, so it takes in <c>+ - * /</c>.</summary>
+    private Expr ParseReduce()
+    {
+        var kw = Advance();
+        Advance(); // '['
+        var v = Expect(TokenKind.Ident, "a loop variable, as in 'sum[i in 0..N]'");
+        Expect(TokenKind.In, "'in' after the loop variable");
+        var range = ParseExpr();
+        Expect(TokenKind.RBracket, "']' to close the reduction head");
+        var body = ParseExpr(BpAdd);
+        return new ReduceExpr(kw.Kind == TokenKind.Prod, v.Text, v.Span, range, body, SpanFrom(kw));
+    }
+
+    /// <summary>guess(cfg) fit (X, y) / judge(cfg) fit (X, y)</summary>
+    private Expr ParseFit()
+    {
+        var kw = Advance();
+        Expect(TokenKind.LParen, $"'(' after '{kw.Text}', as in '{kw.Text}(ridge = 0.05) fit (X, y)'");
+        var cfg = ParseArgs(TokenKind.RParen);
+        Expect(TokenKind.RParen, "')' to close the model options");
+        Expect(TokenKind.Fit, "'fit' and the training data, as in 'fit (X, y)'");
+        Expect(TokenKind.LParen, "'(' after 'fit'");
+        var x = ParseExpr();
+        Expect(TokenKind.Comma, "',' between the features and the targets");
+        var y = ParseExpr();
+        Expect(TokenKind.RParen, "')' to close fit (...)");
+        return new FitExpr(kw.Kind == TokenKind.Judge, cfg, x, y, SpanFrom(kw));
     }
 
     private Expr ParseIndex(Expr target)

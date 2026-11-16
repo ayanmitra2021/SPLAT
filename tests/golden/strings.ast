@@ -1,0 +1,10 @@
+(bind name "Ada")
+(bind x 3.14159)
+(call squish (str "hello " (interp name) ", val = " (interp x ".3")))
+(call
+  squish
+  (str "braces \{ literal } and " (interp (call f (str "nested " (interp name)))) " done"))
+(bind ch c"a")
+(bind nl c"\\n")
+(wag count 0)
+(+= count 1)
