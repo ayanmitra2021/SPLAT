@@ -29,6 +29,7 @@
 
   <ItemGroup>
     <None Include="..\golden\**\*.*" Link="golden\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\m1_acceptance.*" Link="m1\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

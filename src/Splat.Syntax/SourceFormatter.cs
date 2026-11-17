@@ -146,6 +146,8 @@ public static class SourceFormatter
         UnaryExpr => Parser.PrecUnary,
         LambdaExpr or IntegExpr => 1,          // bodies run to the right as far as they can: always parenthesise as an operand
         ReduceExpr => Parser.PrecReduceBody - 1, // body takes in '+ -', so it must be wrapped inside any arithmetic operator
+        StepExpr => Parser.PrecBy,
+        ChainExpr => Parser.PrecThen,
         _ => int.MaxValue,
     };
 
@@ -189,6 +191,9 @@ public static class SourceFormatter
             case FullSlice: return ":";
             case MemberExpr m: return Wrap(m.Target, Prec(m.Target) < Parser.PrecPostfix) + "." + m.Name;
             case ListLiteral l: return "[" + string.Join(", ", l.Items.Select(Expr)) + "]";
+            case StepExpr s: return Wrap(s.Range, Prec(s.Range) < Parser.PrecBy) + " by " + Wrap(s.Step, Prec(s.Step) <= Parser.PrecRange);
+            case ChainExpr c: return string.Join(" then ", c.Parts.Select(p => Wrap(p, Prec(p) <= Parser.PrecThen)));
+            case ParenListExpr l: return "(" + string.Join(", ", l.Items.Select(Expr)) + ")";
             case LambdaExpr l: return Lambda(l);
             case NormExpr n:
             {

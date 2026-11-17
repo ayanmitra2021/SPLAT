@@ -1,0 +1,14 @@
+# A zero or negative step is rejected before anything runs; a chain must keep one element type.
+spin i in 0..10 by 0:
+    squish i
+;
+spin i in 10..0 by -2:
+    squish i
+;
+spin x in 0..3 then "abc":
+    squish x
+;
+spin x in 42:
+    squish x
+;
+b := 5 in 5

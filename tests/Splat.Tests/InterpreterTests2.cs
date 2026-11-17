@@ -158,6 +158,8 @@ public class Phase5GoldenTests
     }
 }
 
+// Both CLI test classes redirect the process-wide Console, so they must not run in parallel with each other.
+[Collection("Console")]
 public class CliRunTests
 {
     private static (int Code, string Out, string Err) Cli(params string[] args)

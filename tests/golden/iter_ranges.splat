@@ -1,0 +1,46 @@
+# Stepped and reversed ranges; `by` and `rev` work with inclusive ranges and in membership tests too.
+wag out = ""
+spin i in 0..10 by 3:
+    out = out + "{i} "
+;
+squish "by 3:       {out}"
+
+out = ""
+spin i in 0..=10 by 5:
+    out = out + "{i} "
+;
+squish "..= by 5:   {out}"
+
+out = ""
+spin i in rev(0..5):
+    out = out + "{i} "
+;
+squish "rev:        {out}"
+
+out = ""
+spin i in rev(0..10 by 4):
+    out = out + "{i} "
+;
+squish "rev by 4:   {out}"
+
+out = ""
+spin i in 5..5:
+    out = out + "{i} "
+;
+squish "empty:      [{out}]"
+
+step := 7
+wag sum_of_steps = 0
+spin i in 0..100 by step:
+    sum_of_steps += i
+;
+squish "by a variable: {sum_of_steps}"
+
+squish 4 in 0..10 by 2, 5 in 0..10 by 2, 10 in 0..10, 10 in 0..=10, 10 in 0..=10 by 5
+squish 0..10 by 2, rev(1..=4)
+big::i64 = 3_000_000_000
+wag steps::i64 = 0
+spin n in big..big + 10 by 4:
+    steps += 1
+;
+squish "i64 range took {steps} steps"

@@ -14,7 +14,9 @@ public sealed partial class Parser
     private const int BpMul = 70;       // level 6: * / % .+ .-
     private const int BpAdd = 60;       // level 7: + -
     private const int BpRange = 50;     // level 8: .. ..=  (non-associative)
-    private const int BpCompare = 40;   // level 9
+    private const int BpBy = 48;        // `a..b by n`: looser than ranges, tighter than `then`
+    private const int BpThen = 45;      // `a then b`: looser than ranges/by, tighter than `in` and comparisons
+    private const int BpCompare = 40;   // level 9 (also `x in S`)
     private const int BpAnd = 32;       // level 10: 'and' binds tighter than 'or' (decision recorded in docs/decisions.md)
     private const int BpOr = 30;
     private const int BpPipe = 20;      // level 11: |> >>
@@ -34,7 +36,8 @@ public sealed partial class Parser
                 bp = BpMul; return true;
             case TokenKind.Plus or TokenKind.Minus: bp = BpAdd; return true;
             case TokenKind.DotDot or TokenKind.DotDotEq: bp = BpRange; assoc = Assoc.None; return true;
-            case TokenKind.Lt or TokenKind.Le or TokenKind.Gt or TokenKind.Ge or TokenKind.EqEq or TokenKind.BangEq:
+            case TokenKind.Lt or TokenKind.Le or TokenKind.Gt or TokenKind.Ge or TokenKind.EqEq or TokenKind.BangEq
+                or TokenKind.In:
                 bp = BpCompare; return true;
             case TokenKind.And: bp = BpAnd; return true;
             case TokenKind.Or: bp = BpOr; return true;
@@ -43,6 +46,9 @@ public sealed partial class Parser
         }
     }
 
+    internal static int PrecBy => BpBy;
+    internal static int PrecThen => BpThen;
+    internal static int PrecRange => BpRange;
     internal static int PrecUnary => BpUnary;
     internal static int PrecPostfix => BpPostfix;
     internal static int PrecReduceBody => BpAdd;
@@ -58,40 +64,105 @@ public sealed partial class Parser
         Enter();
         try
         {
-            var left = ParsePrefix();
-            while (true)
+            return ParseInfix(ParsePrefix(), minBp);
+        }
+        finally { Leave(); }
+    }
+
+    /// <summary>`by` and `then` are contextual: ordinary identifiers everywhere except right after an expression on the same line.</summary>
+    private static bool IsWord(Token t, string word) =>
+        t.Kind == TokenKind.Ident && !t.NewlineBefore && t.Text == word;
+
+    /// <summary>The operator loop of the Pratt parser, continuing from an already-parsed left operand.</summary>
+    private Expr ParseInfix(Expr left, int minBp)
+    {
+        while (true)
+        {
+            var t = Cur;
+            switch (t.Kind)
             {
-                var t = Cur;
-                switch (t.Kind)
+                case TokenKind.LParen:
+                    left = ParseCall(left);
+                    continue;
+                case TokenKind.LBracket:
+                    left = ParseIndex(left);
+                    continue;
+                case TokenKind.Dot:
                 {
-                    case TokenKind.LParen:
-                        left = ParseCall(left);
-                        continue;
-                    case TokenKind.LBracket:
-                        left = ParseIndex(left);
-                        continue;
-                    case TokenKind.Dot:
-                    {
-                        Advance();
-                        var name = Expect(TokenKind.Ident, "a member name after '.'");
-                        left = new MemberExpr(left, name.Text, name.Span, _src.Join(left.Span, name.Span));
-                        continue;
-                    }
-                    case TokenKind.Transpose or TokenKind.ConjTranspose:
-                        Advance();
-                        left = new PostfixExpr(t.Kind, left, _src.Join(left.Span, t.Span));
-                        continue;
+                    Advance();
+                    var name = Expect(TokenKind.Ident, "a member name after '.'");
+                    left = new MemberExpr(left, name.Text, name.Span, _src.Join(left.Span, name.Span));
+                    continue;
                 }
-
-                if (!TryGetBinary(t.Kind, out int bp, out var assoc) || bp < minBp) break;
-                Advance();
-                var right = ParseExpr(assoc == Assoc.Right ? bp : bp + 1);
-                left = new BinaryExpr(t.Kind, left, right, _src.Join(left.Span, right.Span));
-
-                if (assoc == Assoc.None && Cur.Kind is TokenKind.DotDot or TokenKind.DotDotEq)
-                    throw Fail(Cur, "an operator that can follow a range (ranges do not chain; use parentheses)");
+                case TokenKind.Transpose or TokenKind.ConjTranspose:
+                    Advance();
+                    left = new PostfixExpr(t.Kind, left, _src.Join(left.Span, t.Span));
+                    continue;
+                case TokenKind.In when BpCompare >= minBp:
+                {
+                    Advance();
+                    var set = ParseMembershipSet();
+                    left = new BinaryExpr(TokenKind.In, left, set, _src.Join(left.Span, set.Span));
+                    continue;
+                }
             }
-            return left;
+
+            if (IsWord(t, "by") && BpBy >= minBp)
+            {
+                if (left is not BinaryExpr { Op: TokenKind.DotDot or TokenKind.DotDotEq })
+                    throw Fail(t, "a range ('a..b') before 'by'; only a range can be stepped");
+                Advance();
+                var step = ParseExpr(BpRange + 1);
+                left = new StepExpr(left, step, _src.Join(left.Span, step.Span));
+                continue;
+            }
+
+            if (IsWord(t, "then") && BpThen >= minBp)
+            {
+                Advance();
+                var next = ParseExpr(BpThen + 1);
+                var parts = left is ChainExpr c ? [.. c.Parts, next] : new List<Expr> { left, next };
+                left = new ChainExpr(parts, _src.Join(parts[0].Span, next.Span));
+                continue;
+            }
+
+            if (!TryGetBinary(t.Kind, out int bp, out var assoc) || bp < minBp) break;
+            Advance();
+            var right = ParseExpr(assoc == Assoc.Right ? bp : bp + 1);
+            left = new BinaryExpr(t.Kind, left, right, _src.Join(left.Span, right.Span));
+
+            if (assoc == Assoc.None && Cur.Kind is TokenKind.DotDot or TokenKind.DotDotEq)
+                throw Fail(Cur, "an operator that can follow a range (ranges do not chain; use parentheses)");
+        }
+        return left;
+    }
+
+    /// <summary>
+    /// The right side of <c>in</c>. A parenthesised comma list <c>(a, b, c)</c> is the membership list, legal only here;
+    /// a single parenthesised expression is ordinary grouping.
+    /// </summary>
+    private Expr ParseMembershipSet()
+    {
+        Enter();
+        try
+        {
+            if (!At(TokenKind.LParen)) return ParseExpr(BpCompare + 1);
+            var open = Advance();
+            if (Match(TokenKind.RParen)) return ParseInfix(new UnitLiteral(SpanFrom(open)), BpCompare + 1);
+            var first = ParseExpr();
+            if (At(TokenKind.Comma))
+            {
+                var items = new List<Expr> { first };
+                while (Match(TokenKind.Comma))
+                {
+                    if (At(TokenKind.RParen)) break;
+                    items.Add(ParseExpr());
+                }
+                Expect(TokenKind.RParen, "')' to close the list after 'in'");
+                return ParseInfix(new ParenListExpr(items, SpanFrom(open)), BpCompare + 1);
+            }
+            Expect(TokenKind.RParen, "')' to close the parenthesis");
+            return ParseInfix(first, BpCompare + 1);
         }
         finally { Leave(); }
     }

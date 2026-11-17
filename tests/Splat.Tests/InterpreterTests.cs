@@ -19,12 +19,12 @@ internal static class RunHelper
         }
     }
 
-    public static Result Run(string code, string file = "t.splat")
+    public static Result Run(string code, string file = "t.splat", string stdin = "")
     {
         var diag = new DiagnosticEngine();
         var so = new StringWriter { NewLine = "\n" };
         var se = new StringWriter { NewLine = "\n" };
-        var outcome = Pipeline.Run(new SourceText(file, code), diag, so, se);
+        var outcome = Pipeline.Run(new SourceText(file, code), diag, so, se, new StringReader(stdin));
         return new Result(outcome, so.ToString(), se.ToString(), diag);
     }
 

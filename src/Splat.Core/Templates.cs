@@ -167,6 +167,23 @@ public static class Templates
         $"🔮 CRYSTAL BALL BROKEN [Line {span.Line}]: Cannot work out {what}.",
         fix);
 
+    // ---- Phase 6: iteration core, REPL ----
+
+    public static Diagnostic BadStep(SourceSpan span, string step) => new(
+        DiagnosticCategory.BadStep, span,
+        $"🐌 STEP BROTHER [{Where(span)}]: A step of {step} would never get anywhere. Ranges walk forward in steps of 1 or more.",
+        "Use a step of at least 1 (for example '0..10 by 2'); to count down, wrap the range in 'rev(...)'.");
+
+    public static Diagnostic ChainMismatch(SourceSpan span, string found, string expected) => new(
+        DiagnosticCategory.ChainMismatch, span,
+        $"🔗 BROKEN CHAIN [Line {span.Line}]: Tried to link a '{found}' part onto a chain of '{expected}'. Every link must be the same metal.",
+        $"Every part of a 'then' chain must produce '{expected}'; convert or replace this part.");
+
+    public static Diagnostic UnknownCommand(SourceSpan span, string command) => new(
+        DiagnosticCategory.UnknownCommand, span,
+        $"🎛️ BUTTON NOT FOUND [REPL]: '{command}' is not one of my commands. I have a short menu.",
+        "Type ':help' to see the commands: :help, :reset, :load <file>, :history, :quit.");
+
     // ---- Phase 5: runtime ----
 
     public static Diagnostic IntegerOverflow(SourceSpan span, string type, string op) => new(

@@ -7,7 +7,7 @@ namespace Splat.Runtime;
 public enum VKind : byte
 {
     I8, I16, I32, I64, U8, U16, U32, U64, Usz, Smol, Mid, Chonk, Bit, Txt, Char, Zip,
-    Range, Func,
+    Range, Func, Chain,
 }
 
 /// <summary>
@@ -28,8 +28,11 @@ public readonly struct Value
     public static Value Int(VKind kind, long bits) => new(kind, bits, null);
     public static Value Char(int codePoint) => new(VKind.Char, codePoint, null);
     public static Value Str(string s) => new(VKind.Txt, 0, s);
-    public static Value Range(Value lo, Value hi, bool inclusive) => new(VKind.Range, 0, new RangeData(lo, hi, inclusive));
+    public static Value Range(Value lo, Value hi, bool inclusive) => new(VKind.Range, 0, new RangeData(lo, hi, inclusive, 1, false));
+    public static Value Range(RangeData data) => new(VKind.Range, 0, data);
     public static Value Func(object closure) => new(VKind.Func, 0, closure);
+    /// <summary>A <c>then</c> chain: its parts are iterated one after another.</summary>
+    public static Value Chain(Value[] parts) => new(VKind.Chain, 0, parts);
 
     /// <summary>A float of the given kind, rounded to that kind's precision.</summary>
     public static Value Float(VKind kind, double d) => new(kind, BitConverter.DoubleToInt64Bits(Round(kind, d)), null);
@@ -45,6 +48,7 @@ public readonly struct Value
     public double AsDouble => BitConverter.Int64BitsToDouble(Bits);
     public string AsString => (string)Ref!;
     public RangeData AsRange => (RangeData)Ref!;
+    public Value[] AsChain => (Value[])Ref!;
 
     public bool IsInt => Kind <= VKind.Usz;
     public bool IsUnsigned => Kind is >= VKind.U8 and <= VKind.Usz;
@@ -60,13 +64,47 @@ public readonly struct Value
     {
         VKind.Range => "range",
         VKind.Func => "cook",
+        VKind.Chain => "chain",
         _ => Types.Of((Prim)(int)Kind).Name,
     };
 
     public override string ToString() => Formatter.Display(this);
 }
 
-public sealed record RangeData(Value Lo, Value Hi, bool Inclusive);
+/// <summary>
+/// A range <c>lo..hi</c> / <c>lo..=hi</c>, visiting every <see cref="Step"/>-th integer from <c>lo</c>. A reversed range
+/// (<c>rev(...)</c>) visits the same values from the last one back down to the first.
+/// </summary>
+public sealed record RangeData(Value Lo, Value Hi, bool Inclusive, Int128 Step, bool Reversed)
+{
+    /// <summary>How many values the range visits.</summary>
+    public Int128 Count
+    {
+        get
+        {
+            Int128 span = Hi.AsInt128 - Lo.AsInt128;
+            if (Inclusive) return span < 0 ? 0 : span / Step + 1;
+            return span <= 0 ? 0 : (span - 1) / Step + 1;
+        }
+    }
+
+    /// <summary>The values in visiting order. Lazy: a huge range costs nothing until it is walked.</summary>
+    public IEnumerable<Value> Items()
+    {
+        var kind = Lo.Kind;
+        Int128 lo = Lo.AsInt128, n = Count;
+        for (Int128 k = 0; k < n; k++)
+            yield return Value.FromInt128(kind, lo + (Reversed ? n - 1 - k : k) * Step);
+    }
+
+    /// <summary>True when <paramref name="x"/> is one of the values the range visits (on the step grid, within the bounds).</summary>
+    public bool Contains(Int128 x)
+    {
+        Int128 lo = Lo.AsInt128, hi = Hi.AsInt128;
+        if (x < lo || (Inclusive ? x > hi : x >= hi)) return false;
+        return (x - lo) % Step == 0;
+    }
+}
 
 internal static class Kinds
 {
@@ -88,10 +126,26 @@ public static class Formatter
         VKind.Txt => v.AsString,
         VKind.Char => char.ConvertFromUtf32((int)v.Bits),
         VKind.Zip => "()",
-        VKind.Range => $"{Display(v.AsRange.Lo)}{(v.AsRange.Inclusive ? "..=" : "..")}{Display(v.AsRange.Hi)}",
+        VKind.Range => RangeText(v.AsRange),
         VKind.Func => "<cook>",
+        VKind.Chain => string.Join(" then ", v.AsChain.Select(Display)),
         _ when v.IsInt => v.AsInt128.ToString(CultureInfo.InvariantCulture),
         _ => FloatText(v.Kind, v.AsDouble),
+    };
+
+    private static string RangeText(RangeData r)
+    {
+        var text = $"{Display(r.Lo)}{(r.Inclusive ? "..=" : "..")}{Display(r.Hi)}";
+        if (r.Step != 1) text += $" by {r.Step}";
+        return r.Reversed ? $"rev({text})" : text;
+    }
+
+    /// <summary>How the REPL echoes a value: like <see cref="Display"/>, but text and chars show their quotes.</summary>
+    public static string Repr(Value v) => v.Kind switch
+    {
+        VKind.Txt => "\"" + v.AsString.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\t", "\\t").Replace("{", "\\{") + "\"",
+        VKind.Char => "c\"" + Display(v).Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n") + "\"",
+        _ => Display(v),
     };
 
     private static string FloatText(VKind kind, double d)

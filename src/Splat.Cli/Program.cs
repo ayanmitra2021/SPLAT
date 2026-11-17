@@ -7,21 +7,25 @@ namespace Splat.Cli;
 
 public static class Program
 {
-    public const string Version = "0.2.0-phase5";
+    public const string Version = "0.2.0-phase6";
 
     public static int Main(string[] args)
     {
         try { Console.OutputEncoding = Encoding.UTF8; } catch (IOException) { }
 
-        if (args.Length == 0 || args[0] is "--version" or "-v")
+        if (args.Length == 1 && args[0] is "--version" or "-v")
         {
             Console.WriteLine($"🍥 SPLAT {Version} - Strict, Portable, Linear-algebraic & AI Terse-language");
-            if (args.Length == 0) Console.WriteLine("The REPL arrives in Phase 6. Try 'splat run file.splat', 'splat check file.splat', 'splat tokens file.splat' or 'splat ast file.splat'.");
             return 0;
         }
 
-        switch (args[0])
+        switch (args.Length == 0 ? "repl" : args[0])
         {
+            case "repl" when args.Length <= 1:
+                return RunRepl();
+            case "repl":
+                Console.Error.WriteLine("Usage: splat [repl]");
+                return 64;
             case "run" when args.Length == 2:
                 return RunFile(args[1], checkOnly: false);
             case "run":
@@ -52,7 +56,15 @@ public static class Program
         }
     }
 
-    /// <summary>Exit codes: 0 ok, 65 compile error, 66 file not found, 70 runtime error.</summary>
+    /// <summary>The interactive session. Prompts and the banner show only on a real terminal, so piped input gives clean output.</summary>
+    private static int RunRepl()
+    {
+        bool interactive = !Console.IsInputRedirected;
+        bool color = !Console.IsErrorRedirected && Environment.GetEnvironmentVariable("NO_COLOR") is null;
+        return new Repl(Console.In, Console.Out, Console.Error, interactive, color).Run();
+    }
+
+    /// <summary>Exit codes: 0 ok, 64 usage, 65 compile error, 66 file not found, 70 runtime error.</summary>
     private static int RunFile(string path, bool checkOnly)
     {
         string text;
@@ -69,7 +81,7 @@ public static class Program
         var source = new SourceText(path, text);
         var outcome = checkOnly
             ? (Pipeline.Check(source, diag) ? RunOutcome.Ok : RunOutcome.CompileError)
-            : Pipeline.Run(source, diag, Console.Out, Console.Error);
+            : Pipeline.Run(source, diag, Console.Out, Console.Error, Console.In);
 
         if (outcome != RunOutcome.Ok) ConsolePrinter.ForStdErr().Print(diag);
         return outcome switch { RunOutcome.Ok => 0, RunOutcome.CompileError => 65, _ => 70 };

@@ -1,0 +1,14 @@
+# Membership with a parenthesised list: `c in (c"a", c"e", ...)` desugars to equality tests.
+cook count_vowels(text::txt)::i32:
+    wag n::i32 = 0
+    spin c in text:
+        hmm c in (c"a", c"e", c"i", c"o", c"u"):
+            n += 1
+        ;
+    ;
+    n
+;
+
+squish count_vowels("hello its halloween!"), count_vowels(""), count_vowels("rhythm")
+squish c"e" in "aeiou", c"z" in "aeiou", "ell" in "hello", !("xyz" in "hello")
+squish 3 in (1, 2, 3), 4 in (1, 2, 3), "b" in ("a", "b")

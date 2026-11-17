@@ -66,6 +66,16 @@ public sealed class RangeSType : SType
     public override int GetHashCode() => Name.GetHashCode(StringComparison.Ordinal);
 }
 
+/// <summary>A <c>then</c> chain of iterables that all produce <see cref="Elem"/>.</summary>
+public sealed class ChainSType : SType
+{
+    public SType Elem { get; }
+    public ChainSType(SType elem) => Elem = elem;
+    public override string Name => $"chain<{Elem.Name}>";
+    public override bool Equals(SType? other) => other is ChainSType r && r.Elem.Equals(Elem);
+    public override int GetHashCode() => Name.GetHashCode(StringComparison.Ordinal);
+}
+
 /// <summary>The primitive type singletons and their numeric properties.</summary>
 public static class Types
 {
@@ -121,6 +131,8 @@ public static class Types
                     && Compatible(a.Ret, e.Ret)
                     && a.Params.Zip(e.Params).All(p => Compatible(p.First, p.Second));
             case (RangeSType a, RangeSType e):
+                return Compatible(a.Elem, e.Elem);
+            case (ChainSType a, ChainSType e):
                 return Compatible(a.Elem, e.Elem);
             default:
                 return actual.Equals(expected);

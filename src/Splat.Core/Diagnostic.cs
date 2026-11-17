@@ -41,6 +41,10 @@ public enum DiagnosticCategory
     Panic,
     BadConversion,
     MathDomain,
+    // Phase 6: iteration core and REPL
+    BadStep,
+    ChainMismatch,
+    UnknownCommand,
     Internal,
 }
 

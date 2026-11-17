@@ -1,0 +1,7 @@
+# slurp reads one line from stdin (and echoes an optional prompt first).
+name := slurp("name? ")
+squish "Hello, {name}!"
+age := parse_i32(slurp())
+squish "Next year you will be {age + 1}."
+rest := slurp()
+squish "[{rest}] [{slurp()}]"

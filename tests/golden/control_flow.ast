@@ -10,7 +10,7 @@
       (else (block (yeet "other"))))))
 (wag i 0)
 (spin-while
-  (< i 10)
+  (< i 20)
   (block
     (+= i 1)
     (hmm (if (== (% i 2) 0) (block (skip))))

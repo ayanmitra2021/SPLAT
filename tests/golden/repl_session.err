@@ -1,0 +1,31 @@
+[SE00101] 🔍 WHO DIS [Line 1]: 'undefined_thing' has never been introduced to me. Did you invent it in a dream?
+  --> <repl>:1:6
+   |
+ 1 | y := undefined_thing + 1
+   |      ^^^^^^^^^^^^^^^
+  Fix: Declare 'undefined_thing' with ':=' or 'wag' before using it, or check the spelling.
+
+[SE00300] 🕳️ BLACK HOLE [Line 4]: Divided by zero. Mathematicians are screaming.
+  --> <repl>:4:16
+   |
+ 4 |         squish 1 / (i - 1)
+   |                ^^^^^^^^^^
+  Fix: Check the divisor is non-zero before dividing.
+
+[SE00300] 🕳️ BLACK HOLE [Line 4]: Divided by zero. Mathematicians are screaming.
+  --> <repl>:4:12
+   |
+ 4 |     squish 1 / 0
+   |            ^^^^^
+  Fix: Check the divisor is non-zero before dividing.
+
+[SE00012] 🎛️ BUTTON NOT FOUND [REPL]: ':foo' is not one of my commands. I have a short menu.
+  Fix: Type ':help' to see the commands: :help, :reset, :load <file>, :history, :quit.
+
+[SE00101] 🔍 WHO DIS [Line 1]: 'x' has never been introduced to me. Did you invent it in a dream?
+  --> <repl>:1:1
+   |
+ 1 | x
+   | ^
+  Fix: Declare 'x' with ':=' or 'wag' before using it, or check the spelling.
+

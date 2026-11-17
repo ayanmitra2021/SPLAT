@@ -53,9 +53,6 @@ public sealed class Scope
 /// </summary>
 public sealed class TypeChecker
 {
-    /// <summary>Names callable without a declaration (prelude). Phase 6 adds <c>slurp</c> and the string helpers.</summary>
-    private static readonly HashSet<string> Builtins = new(StringComparer.Ordinal) { "squish", "yell" };
-
     private sealed class FnCtx
     {
         public required string Name { get; init; }
@@ -63,16 +60,19 @@ public sealed class TypeChecker
     }
 
     private readonly DiagnosticEngine _diag;
-    private readonly TypeInfo _info = new();
+    private readonly TypeInfo _info;
     private readonly Scope _globals;
     private FnCtx? _fn;
     private int _loopDepth;
     private HashSet<string> _typeParams = new(StringComparer.Ordinal);
 
-    public TypeChecker(DiagnosticEngine diagnostics, Scope? globals = null)
+    /// <param name="globals">The scope top-level declarations go into (a REPL passes a fresh child of the session scope).</param>
+    /// <param name="info">Where the checker records what it learned; a REPL shares one across entries so earlier functions keep their types.</param>
+    public TypeChecker(DiagnosticEngine diagnostics, Scope? globals = null, TypeInfo? info = null)
     {
         _diag = diagnostics;
         _globals = globals ?? new Scope();
+        _info = info ?? new TypeInfo();
     }
 
     public Scope Globals => _globals;
@@ -318,10 +318,10 @@ public sealed class TypeChecker
             {
                 var st = Infer(sp.Subject!, scope);
                 SType elem = SType.Error;
-                if (st is RangeSType r) elem = r.Elem;
-                else if (st.Equals(Types.Txt)) elem = Types.Char; // iterate a txt character by character
-                else if (!st.IsError && !st.IsAny)
-                    Report(Templates.TypeMismatch(sp.Subject!.Span, N(st), "a range such as 0..10"));
+                if (ElementOf(st) is { } e) elem = e;
+                else if (st.IsAny) elem = SType.Any;
+                else if (!st.IsError)
+                    Report(Templates.TypeMismatch(sp.Subject!.Span, N(st), NotIterable));
                 Declare(body, new Symbol(sp.Variable!, SymbolKind.Variable, elem, false, sp.Subject!.Span), sp.Subject.Span);
                 break;
             }
@@ -333,6 +333,31 @@ public sealed class TypeChecker
 
         // `spin:` with no `bail` never falls out the bottom, so a function ending in one needs no trailing return.
         return sp.Kind == SpinKind.Forever && !ContainsBail(sp.Body.Statements);
+    }
+
+    private const string NotIterable = "something iterable (a range, a txt, ...)";
+
+    /// <summary>
+    /// The one notion of "iterable" in the checker: the element type a value yields in <c>spin</c>, <c>then</c> chains and
+    /// <c>in</c>, or null when the type cannot be iterated. Later phases add lists, sets, maps and tensors here.
+    /// </summary>
+    private static SType? ElementOf(SType t) => t switch
+    {
+        RangeSType r => r.Elem,
+        ChainSType c => c.Elem,
+        PrimType { Kind: Prim.Txt } => Types.Char, // a txt yields one char per Unicode scalar
+        _ => null,
+    };
+
+    /// <summary>The value of an integer literal (optionally negated), if the expression is one.</summary>
+    private static bool TryConstInt(Expr e, out Int128 value)
+    {
+        switch (e)
+        {
+            case IntLiteral i: value = i.Value; return true;
+            case UnaryExpr { Op: TokenKind.Minus, Operand: IntLiteral i }: value = -(Int128)i.Value; return true;
+            default: value = 0; return false;
+        }
     }
 
     private static bool ContainsBail(IReadOnlyList<Stmt> stmts)
@@ -500,6 +525,12 @@ public sealed class TypeChecker
             case BinaryExpr b: return CheckBinary(b, scope, hint);
             case CallExpr c: return CheckCall(c, scope, hint);
             case LambdaExpr l: return CheckLambda(l, scope, hint);
+            case StepExpr st: return CheckStep(st, scope, hint);
+            case ChainExpr ch: return CheckChain(ch, scope, hint);
+            case ParenListExpr pl:
+                foreach (var item in pl.Items) Infer(item, scope);
+                Report(Templates.UnexpectedToken(pl.Span, "a comma list", "a single expression ('(a, b, c)' lists are only legal right after 'in')"));
+                return SType.Error;
             case ErrorExpr: return SType.Error;
 
             case PostfixExpr p: return NotYet(p.Span, "transpose", 13);
@@ -557,8 +588,8 @@ public sealed class TypeChecker
         var sym = scope.Lookup(n.Name);
         if (sym is null)
         {
-            if (Builtins.Contains(n.Name)) return NotYet(n.Span, $"using '{n.Name}' as a value", 6);
-            if (Types.ByName.ContainsKey(n.Name)) return NotYet(n.Span, $"using the conversion '{n.Name}' as a value", 6);
+            if (Prelude.IsBuiltin(n.Name)) return NotYet(n.Span, $"using '{n.Name}' as a value", 7);
+            if (Types.ByName.ContainsKey(n.Name)) return NotYet(n.Span, $"using the conversion '{n.Name}' as a value", 7);
             Report(Templates.UndefinedName(n.Span, n.Name));
             return SType.Error;
         }
@@ -687,6 +718,9 @@ public sealed class TypeChecker
                 Infer(b.Left, scope); Infer(b.Right, scope);
                 return NotYet(b.Span, "elementwise operators", 12);
 
+            case TokenKind.In:
+                return CheckMembership(b, scope);
+
             case TokenKind.DotDot or TokenKind.DotDotEq:
             {
                 var elemHint = hint is RangeSType rs ? rs.Elem : null;
@@ -730,6 +764,91 @@ public sealed class TypeChecker
                 return ArithmeticType(b.Op, l, r, b.Span, OpText(b.Op));
             }
         }
+    }
+
+    // ---- Phase 6: stepped ranges, chains, membership ----
+
+    private SType CheckStep(StepExpr s, Scope scope, SType? hint)
+    {
+        var rt = Infer(s.Range, scope, hint);
+        var elem = (rt as RangeSType)?.Elem;
+        var st = Infer(s.Step, scope, elem is PrimType ? elem : null);
+        if (rt.IsError || st.IsError) return SType.Error;
+        if (elem is null) return SType.Error;
+        if (!Types.Compatible(st, elem)) Mismatch(s.Step.Span, st, elem);
+        else if (TryConstInt(s.Step, out var n) && n <= 0)
+            Report(Templates.BadStep(s.Step.Span, n.ToString()));
+        return rt;
+    }
+
+    private SType CheckChain(ChainExpr c, Scope scope, SType? hint)
+    {
+        SType? elem = null;
+        bool failed = false;
+        foreach (var part in c.Parts)
+        {
+            // Later parts take the first part's element type, so `0..n then 50..100` agree on integer type.
+            var pt = Infer(part, scope, elem is null ? hint : new RangeSType(elem));
+            if (pt.IsError) { failed = true; continue; }
+            var pe = ElementOf(pt);
+            if (pe is null)
+            {
+                if (!pt.IsAny) Report(Templates.TypeMismatch(part.Span, N(pt), NotIterable));
+                failed = true;
+                continue;
+            }
+            if (elem is null) elem = pe;
+            else if (!Types.Compatible(pe, elem)) { Report(Templates.ChainMismatch(part.Span, N(pe), N(elem))); failed = true; }
+        }
+        return failed || elem is null ? SType.Error : new ChainSType(elem);
+    }
+
+    private SType CheckMembership(BinaryExpr b, Scope scope)
+    {
+        if (b.Right is ParenListExpr list)
+        {
+            // `x in (a, b, c)` is `x == a or x == b or x == c`, so every member must have exactly x's type.
+            var (lt, first) = InferPair(b.Left, list.Items[0], scope, null);
+            _info.Set(list, SType.Any);
+            var lhs = lt;
+            var rest = list.Items.Skip(1).Select(i => Infer(i, scope, lhs)).Prepend(first).ToList();
+            if (lt.IsError) return Types.Bit;
+            for (int i = 0; i < rest.Count; i++)
+            {
+                if (rest[i].IsError || lt.IsAny || rest[i].IsAny) continue;
+                if (!lt.Equals(rest[i])) { BadPair(list.Items[i].Span, "in", lt, rest[i]); continue; }
+                if (lt is not PrimType)
+                    Report(Templates.BadOperator(list.Items[i].Span, "in", N(lt), N(rest[i]), "Only primitive values (numbers, bit, txt, char, zip) can be compared."));
+            }
+            return Types.Bit;
+        }
+
+        SType left, right;
+        if (IsFlexible(b.Left))
+        {
+            right = Infer(b.Right, scope);
+            left = Infer(b.Left, scope, ElementOf(right));
+        }
+        else
+        {
+            left = Infer(b.Left, scope);
+            right = Infer(b.Right, scope, left.IsError || left.IsAny ? null : new RangeSType(left));
+        }
+        if (left.IsError || right.IsError) return Types.Bit;
+
+        var elem = ElementOf(right);
+        if (elem is null)
+        {
+            if (!right.IsAny)
+                Report(Templates.TypeMismatch(b.Right.Span, N(right), "something to look inside (a range, a txt, a chain, or a list like '(a, b, c)')"));
+            return Types.Bit;
+        }
+        if (left.IsAny) return Types.Bit;
+
+        // `char in txt` tests a character; `txt in txt` tests a substring.
+        bool ok = right.Equals(Types.Txt) ? left.Equals(Types.Char) || left.Equals(Types.Txt) : Types.Compatible(left, elem);
+        if (!ok) Mismatch(b.Left.Span, left, elem);
+        return Types.Bit;
     }
 
     private SType CheckPipe(BinaryExpr b, Scope scope, SType? hint)
@@ -789,7 +908,7 @@ public sealed class TypeChecker
         if (c.Callee is NameExpr cn && scope.Lookup(cn.Name) is null)
         {
             if (Types.ByName.TryGetValue(cn.Name, out var target)) return CheckConversion(c, cn, target, scope);
-            if (Builtins.Contains(cn.Name)) return CheckBuiltin(c, cn, scope);
+            if (Prelude.IsBuiltin(cn.Name)) return CheckBuiltin(c, cn, scope);
         }
 
         // An immediately-invoked lambda (what `x |> |a| ...` desugars to): infer the arguments first so the lambda's
@@ -899,6 +1018,59 @@ public sealed class TypeChecker
     {
         if (c.Args.Any(a => a.Name is not null))
             Report(Templates.UnexpectedToken(c.Args.First(a => a.Name is not null).Span, "a named argument", $"positional arguments for '{name.Name}'"));
+
+        if (name.Name == "slurp")
+        {
+            // slurp() or slurp(prompt): reads one line from stdin and returns it as a txt.
+            var sig = new FuncSType(c.Args.Count == 0 ? [] : [Types.Txt], Types.Txt);
+            _info.Set(name, sig);
+            if (c.Args.Count > 1)
+            {
+                foreach (var a in c.Args) Infer(a.Value, scope);
+                Report(Templates.WrongArgCount(c.Span, "slurp", 1, c.Args.Count));
+                return Types.Txt;
+            }
+            foreach (var a in c.Args)
+            {
+                var t = Infer(a.Value, scope, Types.Txt);
+                if (!Types.Compatible(t, Types.Txt)) Mismatch(a.Value.Span, t, Types.Txt);
+            }
+            return Types.Txt;
+        }
+
+        if (name.Name == "rev")
+        {
+            if (c.Args.Count != 1)
+            {
+                foreach (var a in c.Args) Infer(a.Value, scope);
+                Report(Templates.WrongArgCount(c.Span, "rev", 1, c.Args.Count));
+                return SType.Error;
+            }
+            var t = Infer(c.Args[0].Value, scope, null);
+            _info.Set(name, new FuncSType([t], t));
+            if (t.IsError) return SType.Error;
+            if (t is RangeSType) return t;
+            if (!t.IsAny) Report(Templates.TypeMismatch(c.Args[0].Value.Span, N(t), "a range such as 0..10"));
+            return SType.Error;
+        }
+
+        if (Prelude.Fixed.TryGetValue(name.Name, out var fixedSig))
+        {
+            _info.Set(name, fixedSig);
+            if (c.Args.Count != fixedSig.Params.Count)
+            {
+                foreach (var a in c.Args) Infer(a.Value, scope);
+                Report(Templates.WrongArgCount(c.Span, name.Name, fixedSig.Params.Count, c.Args.Count));
+                return fixedSig.Ret;
+            }
+            for (int i = 0; i < c.Args.Count; i++)
+            {
+                var t = Infer(c.Args[i].Value, scope, fixedSig.Params[i]);
+                if (!Types.Compatible(t, fixedSig.Params[i])) Mismatch(c.Args[i].Value.Span, t, fixedSig.Params[i]);
+            }
+            return fixedSig.Ret;
+        }
+
         foreach (var a in c.Args)
         {
             var t = Infer(a.Value, scope);

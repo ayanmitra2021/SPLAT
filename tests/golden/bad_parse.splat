@@ -1,0 +1,3 @@
+# Parse functions rip on bad input until Maybe<T> arrives in Phase 7 (TODO).
+squish parse_i32("12")
+squish parse_i32("twelve")

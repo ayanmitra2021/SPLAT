@@ -33,6 +33,35 @@ public sealed class Env(Env? parent = null)
 
     internal void Define(string name, Value value, bool mutable) =>
         (_vars ??= new Dictionary<string, Cell>(StringComparer.Ordinal))[name] = new Cell(value, mutable);
+
+    /// <summary>Remembers the current value of every mutable binding in this scope chain, so a failed REPL entry can be undone.</summary>
+    internal List<(Cell Cell, Value Value)> SnapshotMutable()
+    {
+        var list = new List<(Cell, Value)>();
+        for (var e = this; e is not null; e = e._parent)
+            if (e._vars is not null)
+                foreach (var c in e._vars.Values)
+                    if (c.Mutable) list.Add((c, c.V));
+        return list;
+    }
+
+    internal static void Restore(List<(Cell Cell, Value Value)> snapshot)
+    {
+        foreach (var (cell, value) in snapshot) cell.V = value;
+    }
+
+    /// <summary>Every name visible from this scope (its own and its parents'), without duplicates.</summary>
+    public IEnumerable<string> AllNames()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (var e = this; e is not null; e = e._parent)
+            if (e._vars is not null)
+                foreach (var n in e._vars.Keys) seen.Add(n);
+        return seen;
+    }
+
+    /// <summary>Names bound directly in this scope (not its parents).</summary>
+    public IEnumerable<string> Names => _vars?.Keys ?? Enumerable.Empty<string>();
 }
 
 internal sealed record ParamInfo(string Name, Expr? Default);
@@ -62,18 +91,20 @@ public sealed partial class Interpreter
     private enum Flow { Normal, Break, Continue, Return }
 
     private readonly TypeInfo _info;
-    private readonly DiagnosticEngine _diag;
+    private DiagnosticEngine _diag;
     private readonly TextWriter _stdout;
     private readonly TextWriter _stderr;
+    private readonly TextReader _stdin;
     private readonly List<(string Name, SourceSpan CallSite)> _frames = [];
     private Value _ret = Value.Unit;
 
-    public Interpreter(TypeInfo info, DiagnosticEngine diagnostics, TextWriter stdout, TextWriter stderr)
+    public Interpreter(TypeInfo info, DiagnosticEngine diagnostics, TextWriter stdout, TextWriter stderr, TextReader? stdin = null)
     {
         _info = info;
         _diag = diagnostics;
         _stdout = stdout;
         _stderr = stderr;
+        _stdin = stdin ?? Console.In;
         Globals = new Env();
     }
 
@@ -82,20 +113,32 @@ public sealed partial class Interpreter
     /// <summary>
     /// Runs the program on a large-stack thread. Returns false after reporting a runtime error to the diagnostic engine.
     /// </summary>
-    public bool Run(Program program)
+    public bool Run(Program program) => Execute(program, Globals, _diag, out _);
+
+    /// <summary>
+    /// Runs a program in <paramref name="env"/> (a REPL passes a child of the session scope so a failure leaves no
+    /// bindings behind) and reports runtime errors to <paramref name="diagnostics"/>. When the last statement is an
+    /// expression, its value is returned in <paramref name="last"/>.
+    /// </summary>
+    public bool Execute(Program program, Env env, DiagnosticEngine diagnostics, out Value? last)
     {
+        _diag = diagnostics;
         bool ok = true;
-        var thread = new Thread(() => ok = RunCore(program), ThreadStackBytes);
+        Value? tail = null;
+        var thread = new Thread(() => ok = RunCore(program, env, out tail), ThreadStackBytes);
         thread.Start();
         thread.Join();
+        last = ok ? tail : null;
         return ok;
     }
 
-    private bool RunCore(Program program)
+    private bool RunCore(Program program, Env env, out Value? last)
     {
+        last = null;
         try
         {
-            ExecBlock(program.Statements, Globals, false, out _);
+            ExecBlock(program.Statements, env, true, out var tail);
+            if (program.Statements.Count > 0 && program.Statements[^1] is ExprStmt) last = tail;
             return true;
         }
         catch (RuntimeError e)
@@ -250,33 +293,54 @@ public sealed partial class Interpreter
                 return Flow.Normal;
             default:
             {
-                var subject = Eval(sp.Subject!, env);
-                if (subject.Kind == VKind.Txt)
-                {
-                    foreach (var rune in subject.AsString.EnumerateRunes())
-                    {
-                        var citer = new Env(env);
-                        citer.Define(sp.Variable!, Value.Char(rune.Value), false);
-                        var cf = ExecBlock(sp.Body.Statements, citer, false, out _);
-                        if (cf == Flow.Break) break;
-                        if (cf == Flow.Return) return cf;
-                    }
-                    return Flow.Normal;
-                }
-                var range = subject.AsRange;
-                var kind = range.Lo.Kind;
-                Int128 i = range.Lo.AsInt128;
-                Int128 end = range.Hi.AsInt128 - (range.Inclusive ? 0 : 1);
-                for (; i <= end; i++)
+                foreach (var item in Iterate(Eval(sp.Subject!, env)))
                 {
                     var iter = new Env(env);
-                    iter.Define(sp.Variable!, Value.FromInt128(kind, i), false);
+                    iter.Define(sp.Variable!, item, false);
                     var f = ExecBlock(sp.Body.Statements, iter, false, out _);
                     if (f == Flow.Break) break;
                     if (f == Flow.Return) return f;
                 }
                 return Flow.Normal;
             }
+        }
+    }
+
+    /// <summary>
+    /// The one notion of "iterable" at runtime (mirrors the checker's <c>ElementOf</c>): a txt yields chars, a range its
+    /// integers, a chain each part in turn. Later phases add lists, sets, maps and tensors here.
+    /// </summary>
+    private static IEnumerable<Value> Iterate(Value v)
+    {
+        switch (v.Kind)
+        {
+            case VKind.Txt:
+                foreach (var rune in v.AsString.EnumerateRunes()) yield return Value.Char(rune.Value);
+                break;
+            case VKind.Range:
+                foreach (var x in v.AsRange.Items()) yield return x;
+                break;
+            case VKind.Chain:
+                foreach (var part in v.AsChain)
+                    foreach (var x in Iterate(part)) yield return x;
+                break;
+        }
+    }
+
+    /// <summary>`x in S` for a range (on its step grid), a txt (char or substring) or a chain (any part).</summary>
+    private static bool Contains(Value set, Value x)
+    {
+        switch (set.Kind)
+        {
+            case VKind.Txt:
+                if (x.Kind == VKind.Char) return set.AsString.EnumerateRunes().Any(r => r.Value == x.Bits);
+                return set.AsString.Contains(x.AsString, StringComparison.Ordinal);
+            case VKind.Range:
+                return set.AsRange.Contains(x.AsInt128);
+            case VKind.Chain:
+                return set.AsChain.Any(part => Contains(part, x));
+            default:
+                return false;
         }
     }
 
@@ -302,6 +366,8 @@ public sealed partial class Interpreter
             case UnaryExpr u: return EvalUnary(u, env);
             case BinaryExpr b: return EvalBinary(b, env);
             case CallExpr c: return EvalCall(c, env);
+            case StepExpr st: return EvalStep(st, env);
+            case ChainExpr ch: return Value.Chain(ch.Parts.Select(p => Eval(p, env)).ToArray());
             case LambdaExpr l:
             {
                 var ft = _info.TypeOf(l) as FuncSType;
@@ -375,9 +441,29 @@ public sealed partial class Interpreter
                 return Eval(_info.PipeCall(b) ?? throw Fail(Templates.Internal(b.Span, "unchecked pipe")), env);
             case TokenKind.DotDot or TokenKind.DotDotEq:
                 return Value.Range(Eval(b.Left, env), Eval(b.Right, env), b.Op == TokenKind.DotDotEq);
+            case TokenKind.In:
+            {
+                var x = Eval(b.Left, env);
+                if (b.Right is ParenListExpr list)
+                {
+                    // Sugar for `x == a or x == b or ...`: stops at the first match.
+                    foreach (var item in list.Items)
+                        if (Binary(TokenKind.EqEq, x, Eval(item, env), item.Span).AsBool) return Value.Bool(true);
+                    return Value.Bool(false);
+                }
+                return Value.Bool(Contains(Eval(b.Right, env), x));
+            }
             default:
                 return Binary(b.Op, Eval(b.Left, env), Eval(b.Right, env), b.Span);
         }
+    }
+
+    private Value EvalStep(StepExpr s, Env env)
+    {
+        var range = Eval(s.Range, env).AsRange;
+        var step = Eval(s.Step, env);
+        if (step.AsInt128 <= 0) throw Fail(Templates.BadStep(s.Step.Span, Formatter.Display(step)));
+        return Value.Range(range with { Step = step.AsInt128 });
     }
 
     private Value EvalCall(CallExpr c, Env env)
@@ -392,6 +478,7 @@ public sealed partial class Interpreter
                 (n.Name == "squish" ? _stdout : _stderr).Write(text);
                 return Value.Unit;
             }
+            if (Prelude.IsBuiltin(n.Name)) return CallBuiltin(n.Name, c, env);
         }
 
         var fv = Eval(c.Callee, env);
@@ -406,6 +493,56 @@ public sealed partial class Interpreter
             has[target] = true;
         }
         return Call(closure, vals, has, c.Span);
+    }
+
+    // ---- prelude ----
+
+    private Value CallBuiltin(string name, CallExpr c, Env env)
+    {
+        var args = c.Args.Select(a => Eval(a.Value, env)).ToArray();
+        switch (name)
+        {
+            case "slurp":
+            {
+                if (args.Length == 1)
+                {
+                    _stdout.Write(args[0].AsString);
+                    _stdout.Flush();
+                }
+                // End of input reads as an empty line; Phase 7's Maybe<txt> can tell the two apart.
+                return Value.Str(_stdin.ReadLine() ?? "");
+            }
+            case "rev":
+                return Value.Range(args[0].AsRange with { Reversed = !args[0].AsRange.Reversed });
+            case "len":
+                return Value.Int(VKind.Usz, args[0].AsString.EnumerateRunes().Count());
+            case "upper": return Value.Str(args[0].AsString.ToUpperInvariant());
+            case "lower": return Value.Str(args[0].AsString.ToLowerInvariant());
+            case "trim": return Value.Str(args[0].AsString.Trim());
+            case "parse_i32": return ParseInt(args[0].AsString, VKind.I32, c.Span);
+            case "parse_i64": return ParseInt(args[0].AsString, VKind.I64, c.Span);
+            case "parse_mid": return ParseFloat(args[0].AsString, VKind.Mid, c.Span);
+            case "parse_chonk": return ParseFloat(args[0].AsString, VKind.Chonk, c.Span);
+            default:
+                throw Fail(Templates.Internal(c.Span, $"prelude function '{name}'"));
+        }
+    }
+
+    // TODO(Phase 7): the parse functions return Maybe<T> once it exists; until then bad input is an unrecoverable rip.
+    private Value ParseInt(string text, VKind kind, SourceSpan span)
+    {
+        if (Int128.TryParse(text.Trim(), System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var n)
+            && n >= Types.Min(Kinds.P(kind)) && n <= Types.Max(Kinds.P(kind)))
+            return Value.FromInt128(kind, n);
+        throw Fail(Templates.Panic(span, $"Cannot read \"{text}\" as a {Kinds.Name(kind)}. Not a whole number, or too big for the type.", Trace()));
+    }
+
+    private Value ParseFloat(string text, VKind kind, SourceSpan span)
+    {
+        if (double.TryParse(text.Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var d)
+            && double.IsFinite(d))
+            return Value.Float(kind, d);
+        throw Fail(Templates.Panic(span, $"Cannot read \"{text}\" as a {Kinds.Name(kind)}. That is not a finite decimal number.", Trace()));
     }
 
     private Value Call(Closure f, Value[] vals, bool[] has, SourceSpan callSite)

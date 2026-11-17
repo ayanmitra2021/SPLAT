@@ -99,6 +99,15 @@ public sealed record ReduceExpr(bool IsProduct, string Variable, SourceSpan Vari
 /// <summary><c>guess(ridge = 0.05) fit (X, y)</c> (regression) or <c>judge(svm(kernel = "rbf")) fit (X, y)</c> (classification).</summary>
 public sealed record FitExpr(bool IsJudge, IReadOnlyList<Arg> Config, Expr Features, Expr Targets, SourceSpan Span) : Expr(Span);
 
+/// <summary><c>a..b by n</c> / <c>a..=b by n</c>: a range stepped by <c>n</c>. <see cref="Range"/> is always a <c>..</c>/<c>..=</c> binary.</summary>
+public sealed record StepExpr(Expr Range, Expr Step, SourceSpan Span) : Expr(Span);
+
+/// <summary><c>a then b then c</c>: disjoint iterables visited one after another (two or more parts).</summary>
+public sealed record ChainExpr(IReadOnlyList<Expr> Parts, SourceSpan Span) : Expr(Span);
+
+/// <summary>The parenthesised list after <c>in</c>: <c>x in (a, b, c)</c>. Legal only as the right side of <c>in</c>.</summary>
+public sealed record ParenListExpr(IReadOnlyList<Expr> Items, SourceSpan Span) : Expr(Span);
+
 /// <summary>Placeholder left where an expression failed to parse (already reported).</summary>
 public sealed record ErrorExpr(SourceSpan Span) : Expr(Span);
 

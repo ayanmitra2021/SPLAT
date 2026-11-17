@@ -33,6 +33,7 @@ public static class DiagnosticCodes
         [DiagnosticCategory.NotAssignable] = new(Severity.Error, 9),
         [DiagnosticCategory.NotYetBuilt] = new(Severity.Error, 10),
         [DiagnosticCategory.TooDeep] = new(Severity.Error, 11),
+        [DiagnosticCategory.UnknownCommand] = new(Severity.Error, 12),
         // names, types, shapes
         [DiagnosticCategory.TypeMismatch] = new(Severity.Error, 100),
         [DiagnosticCategory.UndefinedName] = new(Severity.Error, 101),
@@ -47,6 +48,8 @@ public static class DiagnosticCodes
         [DiagnosticCategory.MissingReturn] = new(Severity.Error, 110),
         [DiagnosticCategory.BadFormat] = new(Severity.Error, 111),
         [DiagnosticCategory.CannotInfer] = new(Severity.Error, 112),
+        [DiagnosticCategory.BadStep] = new(Severity.Error, 113),
+        [DiagnosticCategory.ChainMismatch] = new(Severity.Error, 114),
         // ownership and zones
         [DiagnosticCategory.UseAfterMove] = new(Severity.Error, 200),
         [DiagnosticCategory.ZoneEscape] = new(Severity.Error, 201),

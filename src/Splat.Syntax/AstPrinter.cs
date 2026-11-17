@@ -60,7 +60,7 @@ public static class AstPrinter
         TokenKind.DotMinus => ".-", TokenKind.DotDot => "..", TokenKind.DotDotEq => "..=", TokenKind.Lt => "<",
         TokenKind.Le => "<=", TokenKind.Gt => ">", TokenKind.Ge => ">=", TokenKind.EqEq => "==", TokenKind.BangEq => "!=",
         TokenKind.Bang => "!", TokenKind.Amp => "&", TokenKind.Tilde => "~", TokenKind.And => "and", TokenKind.Or => "or",
-        TokenKind.PipeGreater => "|>", TokenKind.GreaterGreater => ">>", TokenKind.Transpose => "'",
+        TokenKind.PipeGreater => "|>", TokenKind.GreaterGreater => ">>", TokenKind.In => "in", TokenKind.Transpose => "'",
         TokenKind.ConjTranspose => "''", TokenKind.Assign => "=", TokenKind.PlusAssign => "+=",
         TokenKind.MinusAssign => "-=", TokenKind.StarAssign => "*=", TokenKind.SlashAssign => "/=",
         TokenKind.AtAssign => "@=", TokenKind.DotStarAssign => ".*=", TokenKind.DotSlashAssign => "./=",
@@ -137,6 +137,9 @@ public static class AstPrinter
             Expr(i.Integrand)]),
         ReduceExpr r => SNode.L(r.IsProduct ? "prod" : "sum", [SNode.A(r.Variable), Expr(r.Range), Expr(r.Body)]),
         FitExpr f => SNode.L(f.IsJudge ? "judge" : "guess", [SNode.L("config", f.Config.Select(Argument)), Expr(f.Features), Expr(f.Targets)]),
+        StepExpr s => SNode.L("by", [Expr(s.Range), Expr(s.Step)]),
+        ChainExpr c => SNode.L("then", c.Parts.Select(Expr)),
+        ParenListExpr l => SNode.L("members", l.Items.Select(Expr)),
         ErrorExpr => SNode.A("(error)"),
         _ => SNode.A("?expr"),
     };

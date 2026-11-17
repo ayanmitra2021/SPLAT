@@ -22,6 +22,7 @@ public class DiagnosticCodeTests
         Templates.LoopControlOutside(S, "bail"), Templates.YeetOutside(S), Templates.MissingReturn(S, "f", "i32"),
         Templates.BadFormat(S, ".3", "p"), Templates.CannotInfer(S, "w", "f"), Templates.IntegerOverflow(S, "i32", "+"),
         Templates.Panic(S, "m", null), Templates.BadConversion(S, "v", "i8"), Templates.MathDomain(S, "p"),
+        Templates.BadStep(S, "0"), Templates.ChainMismatch(S, "char", "i32"), Templates.UnknownCommand(S, ":x"),
     ];
 
     [Fact]

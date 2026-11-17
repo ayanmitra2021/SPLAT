@@ -1,0 +1,12 @@
+# Prelude string helpers and parse functions
+s := "  Hello, SPLAT  "
+squish "[{trim(s)}] [{upper(s)}] [{lower(s)}]"
+squish len("héllo"), len(""), len(trim(s))
+n := parse_i32("42") + 1
+big := parse_i64("-9000000000")
+x := parse_mid("2.5") * 2.0
+y := parse_chonk(" 1e3 ")
+squish n, big, x, y
+squish "text" |> upper |> len
+total := len("abc") + len("de")
+squish "total {total}"
