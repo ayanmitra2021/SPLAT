@@ -1,0 +1,60 @@
+# Maybe<T> is built in; Result<T, E> is the spec's own example (section 4.4), declared by the program.
+fn safe_div(a::i32, b::i32)::Maybe<i32>:
+    if b == 0:
+        ret Nada
+    ;
+    ret Got(a / b)
+;
+
+fn show_maybe(m::Maybe<i32>)::txt =
+    pick m:
+        Got(v) => "got {v}",
+        Nada => "nothing"
+    ;
+
+print show_maybe(safe_div(10, 2)), show_maybe(safe_div(7, 0))
+print safe_div(9, 3), safe_div(1, 0)
+print safe_div(9, 3) == Got(3), safe_div(1, 0) == Nada
+
+enum Result<T, E>:
+    Yay(T),
+    Oof(E)
+;
+
+fn check_positive(n::i32)::Result<i32, txt>:
+    if n > 0:
+        ret Yay(n)
+    ;
+    ret Oof("not positive: {n}")
+;
+
+fn parse_positive(s::txt)::Result<i32, txt> =
+    pick parse_i32(s):
+        Got(n) => check_positive(n),
+        Nada => Oof("not a number: {s}")
+    ;
+
+fn report(r::Result<i32, txt>):
+    pick r:
+        Yay(val) => print "Got {val}",
+        Oof(err) => print "Failed: {err}"
+    ;
+;
+
+report(parse_positive("42"))
+report(parse_positive("-5"))
+report(parse_positive("abc"))
+
+# Generic functions over Maybe: the type arguments are inferred at every call.
+fn map_maybe<T, U>(m::Maybe<T>, f::fn(T)::U)::Maybe<U> =
+    pick m:
+        Got(v) => Got(f(v)),
+        Nada => Nada
+    ;
+
+print map_maybe(Got(20), |x| x * 2 + 1)
+print map_maybe(Got("ab"), |s| len(s))
+print map_maybe(safe_div(1, 0), |x| x + 1)
+
+# The parse functions return Maybe too.
+print parse_i32("12"), parse_i32("twelve"), parse_mid("2.5")

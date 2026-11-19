@@ -1,0 +1,9 @@
+# A pick arm that an earlier arm already covers is only a warning: the program still runs.
+fn size(n::i32)::txt:
+    pick n:
+        0..=9 => "small",
+        3..=5 => "never reached",
+        _ => "big"
+    ;
+;
+print size(4), size(50)

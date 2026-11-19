@@ -31,7 +31,7 @@ public static class SourceFormatter
         switch (s)
         {
             case BindStmt b:
-                if (b.IsMutable) sb.Append("wag ");
+                if (b.IsMutable) sb.Append("var ");
                 sb.Append(b.Name);
                 if (b.Type is null) sb.Append(b.IsMutable ? " = " : " := ");
                 else sb.Append("::").Append(Type(b.Type)).Append(" = ");
@@ -43,44 +43,64 @@ public static class SourceFormatter
             case ExprStmt e:
                 sb.Append(Expr(e.Expression)).Append('\n');
                 break;
-            case CookDecl c:
-                Cook(sb, c, level);
+            case FnDecl c:
+                Fn(sb, c, level);
                 break;
-            case YeetStmt y:
-                sb.Append("yeet").Append(y.Value is null ? "" : " " + Expr(y.Value)).Append('\n');
+            case ReturnStmt y:
+                sb.Append("ret").Append(y.Value is null ? "" : " " + Expr(y.Value)).Append('\n');
                 break;
             case RipStmt r:
                 sb.Append("rip").Append(r.Message is null ? "" : " " + Expr(r.Message)).Append('\n');
                 break;
-            case BailStmt:
-                sb.Append("bail\n");
+            case BreakStmt:
+                sb.Append("br\n");
                 break;
-            case SkipStmt:
-                sb.Append("skip\n");
+            case ContinueStmt:
+                sb.Append("cont\n");
                 break;
-            case HmmStmt h:
+            case IfStmt h:
                 for (int i = 0; i < h.Branches.Count; i++)
                 {
                     if (i > 0) Indent(sb, level);
-                    sb.Append(i == 0 ? "hmm " : "meh ").Append(Expr(h.Branches[i].Condition));
+                    sb.Append(i == 0 ? "if " : "elif ").Append(Expr(h.Branches[i].Condition));
                     Body(sb, h.Branches[i].Body, level);
                 }
                 if (h.Else is not null)
                 {
                     Indent(sb, level);
-                    sb.Append("nah");
+                    sb.Append("el");
                     Body(sb, h.Else, level);
                 }
                 Indent(sb, level);
                 sb.Append(";\n");
                 break;
-            case SpinStmt sp:
-                sb.Append("spin");
-                if (sp.Kind == SpinKind.While) sb.Append(" while ").Append(Expr(sp.Subject!));
-                else if (sp.Kind == SpinKind.In) sb.Append(' ').Append(sp.Variable).Append(" in ").Append(Expr(sp.Subject!));
+            case LoopStmt sp:
+                sb.Append("loop");
+                if (sp.Kind == LoopKind.While) sb.Append(" while ").Append(Expr(sp.Subject!));
+                else if (sp.Kind == LoopKind.In) sb.Append(' ').Append(sp.Variable).Append(" in ").Append(Expr(sp.Subject!));
                 Body(sb, sp.Body, level);
                 Indent(sb, level);
                 sb.Append(";\n");
+                break;
+            case EnumDecl m:
+                sb.Append("enum ").Append(m.Name);
+                if (m.Generics.Count > 0)
+                    sb.Append('<').Append(string.Join(", ", m.Generics.Select(g => g.IsDim ? "$" + g.Name : g.Bound is null ? g.Name : g.Name + ": " + g.Bound))).Append('>');
+                sb.Append(":\n");
+                for (int i = 0; i < m.Variants.Count; i++)
+                {
+                    var v = m.Variants[i];
+                    Indent(sb, level + 1);
+                    sb.Append(v.Name);
+                    if (v.Payloads.Count > 0) sb.Append('(').Append(string.Join(", ", v.Payloads.Select(Type))).Append(')');
+                    sb.Append(i + 1 < m.Variants.Count ? ",\n" : "\n");
+                }
+                Indent(sb, level);
+                sb.Append(";\n");
+                break;
+            case TupleBindStmt tb:
+                sb.Append(tb.IsMutable ? "var " : "").Append('(').Append(string.Join(", ", tb.Names)).Append(')')
+                  .Append(tb.IsMutable ? " = " : " := ").Append(Expr(tb.Value)).Append('\n');
                 break;
             case ReservedStmt r:
                 sb.Append("# (skipped ").Append(r.Keyword).Append(" construct)\n");
@@ -91,9 +111,9 @@ public static class SourceFormatter
         }
     }
 
-    private static void Cook(StringBuilder sb, CookDecl c, int level)
+    private static void Fn(StringBuilder sb, FnDecl c, int level)
     {
-        sb.Append("cook ").Append(c.OpSymbol is null ? c.Name : "op " + c.OpSymbol);
+        sb.Append("fn ").Append(c.OpSymbol is null ? c.Name : "op " + c.OpSymbol);
         if (c.Generics.Count > 0)
         {
             sb.Append('<').Append(string.Join(", ", c.Generics.Select(g =>
@@ -113,9 +133,9 @@ public static class SourceFormatter
 
     private static string Param(Param p) => p.Kind switch
     {
-        ParamKind.Me => "me",
-        ParamKind.PeekMe => "&me",
-        ParamKind.PokeMe => "~me",
+        ParamKind.Self => "self",
+        ParamKind.PeekSelf => "&self",
+        ParamKind.PokeSelf => "~self",
         _ => p.Name + "::" + Type(p.Type!) + (p.Default is null ? "" : " = " + Expr(p.Default)),
     };
 
@@ -126,7 +146,8 @@ public static class SourceFormatter
         NamedType n => n.Args.Count == 0 ? n.Name : n.Name + "<" + string.Join(", ", n.Args.Select(Type)) + ">",
         TensorType tt => Type(tt.Element) + "[" + string.Join(", ", tt.Dims.Select(Dim)) + "]",
         RefType r => (r.IsPoke ? "~" : "&") + Type(r.Inner),
-        FuncType f => "cook(" + string.Join(", ", f.Params.Select(Type)) + ")" + (f.Return is null ? "" : "::" + Type(f.Return)),
+        TupleType tu => "(" + string.Join(", ", tu.Items.Select(Type)) + ")",
+        FuncType f => "fn(" + string.Join(", ", f.Params.Select(Type)) + ")" + (f.Return is null ? "" : "::" + Type(f.Return)),
         _ => "?",
     };
 
@@ -168,7 +189,7 @@ public static class SourceFormatter
             case FloatLiteral f: return AstPrinter.FloatText(f.Value);
             case CharLiteral c:
                 return "c" + AstPrinter.Quote(char.ConvertFromUtf32(c.Value)).Replace("\\{", "{");
-            case BoolLiteral b: return b.Value ? "yep" : "nop";
+            case BoolLiteral b: return b.Value ? "true" : "false";
             case UnitLiteral: return "()";
             case StringTemplate s: return Template(s);
             case NameExpr n: return n.Name;
@@ -194,6 +215,9 @@ public static class SourceFormatter
             case StepExpr s: return Wrap(s.Range, Prec(s.Range) < Parser.PrecBy) + " by " + Wrap(s.Step, Prec(s.Step) <= Parser.PrecRange);
             case ChainExpr c: return string.Join(" then ", c.Parts.Select(p => Wrap(p, Prec(p) <= Parser.PrecThen)));
             case ParenListExpr l: return "(" + string.Join(", ", l.Items.Select(Expr)) + ")";
+            case TupleExpr t: return "(" + string.Join(", ", t.Items.Select(Expr)) + ")";
+            case PairExpr pr: return Expr(pr.Key) + " => " + Expr(pr.Value);
+            case PickExpr pk: return Pick(pk);
             case LambdaExpr l: return Lambda(l);
             case NormExpr n:
             {
@@ -210,11 +234,39 @@ public static class SourceFormatter
                 return (r.IsProduct ? "prod[" : "sum[") + r.Variable + " in " + Expr(r.Range) + "] " +
                        Wrap(r.Body, Prec(r.Body) < PrecReduceBody);
             case FitExpr f:
-                return (f.IsJudge ? "judge(" : "guess(") + string.Join(", ", f.Config.Select(Named)) + ") fit (" +
+                return (f.IsClassify ? "classify(" : "regress(") + string.Join(", ", f.Config.Select(Named)) + ") fit (" +
                        Expr(f.Features) + ", " + Expr(f.Targets) + ")";
             default: return "(error)";
         }
     }
+
+    private static string Pick(PickExpr pk)
+    {
+        var sb = new StringBuilder("pick ").Append(Expr(pk.Subject)).Append(":\n");
+        foreach (var arm in pk.Arms)
+        {
+            sb.Append("    ").Append(Pattern(arm.Pat));
+            if (arm.ExprBody is not null) sb.Append(" => ").Append(Expr(arm.ExprBody)).Append(",\n");
+            else
+            {
+                sb.Append(":\n");
+                foreach (var st in arm.BlockBody!.Statements) Stmt(sb, st, 2);
+                sb.Append("    ;\n");
+            }
+        }
+        return sb.Append(';').ToString();
+    }
+
+    public static string Pattern(Pattern p) => p switch
+    {
+        WildcardPat => "_",
+        BindPat b => b.Name,
+        LiteralPat l => Expr(l.Value),
+        VariantPat v => v.Bindings.Count == 0 ? v.VariantName : v.VariantName + "(" + string.Join(", ", v.Bindings.Select(Pattern)) + ")",
+        RangePat r => Expr(r.Lo) + (r.Inclusive ? "..=" : "..") + Expr(r.Hi),
+        TuplePat t => "(" + string.Join(", ", t.Items.Select(Pattern)) + ")",
+        _ => "_",
+    };
 
     private static string Template(StringTemplate s)
     {

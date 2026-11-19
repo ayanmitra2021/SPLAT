@@ -14,52 +14,52 @@ big
 brand_new, double, total, x
 hi Zed
 => 0..10 by 3 :: range<i32>
-=> yep :: bit
+=> true :: bool
 => 8 :: i32
 => "DONE!" :: txt
    1  1 + 2
    2  x := 10
-   3  wag total = 0
+   3  var total = 0
    4  total += x
    5  total
    6  "hi" + " there"
    7  c"a"
-   8  cook double(n::i32)::i32 = n * 2
+   8  fn double(n::i32)::i32 = n * 2
    9  double(21)
-  10  spin i in 0..3:
+  10  loop i in 0..3:
           total += i
       ;
   11  total
-  12  squish "inside {total}"
-  13  hmm total > 5:
-          squish "big"
-      nah:
-          squish "small"
+  12  print "inside {total}"
+  13  if total > 5:
+          print "big"
+      el:
+          print "small"
       ;
   14  x := "shadowed"
   15  x
   16  y := undefined_thing + 1
   17  total
-  18  spin i in 0..3:
+  18  loop i in 0..3:
           total += 100
-          hmm i == 1:
-              squish 1 / (i - 1)
+          if i == 1:
+              print 1 / (i - 1)
           ;
       ;
   19  total
   20  brand_new := 1
-  21  spin i in 0..3:
+  21  loop i in 0..3:
           brand_new := 2
           total += 1000
-          squish 1 / 0
+          print 1 / 0
       ;
   22  total
   23  brand_new
-  24  name := slurp()
-  25  squish "hi {name}"
+  24  name := readl()
+  25  print "hi {name}"
   26  0..10 by 3
   27  3 in (1, 2, 3)
   28  double(double(2))
-  29  cook shout(s::txt)::txt = upper(s) + "!"
+  29  fn shout(s::txt)::txt = upper(s) + "!"
   30  shout("done")
 Session cleared. All bindings and functions are forgotten.

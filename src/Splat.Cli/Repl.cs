@@ -8,7 +8,7 @@ namespace Splat.Cli;
 /// <summary>
 /// The interactive loop. Each entry is lex, parse, check, run against a persistent <see cref="SessionState"/>. Input that
 /// leaves a block, bracket, string or block comment open is continued on the next line. Results go to <c>output</c>,
-/// diagnostics to <c>error</c>; <c>slurp</c> reads from the same <c>input</c>, so a piped transcript can answer it.
+/// diagnostics to <c>error</c>; <c>readl</c> reads from the same <c>input</c>, so a piped transcript can answer it.
 /// </summary>
 public sealed class Repl
 {
@@ -167,7 +167,7 @@ public sealed class Repl
 
     /// <summary>
     /// True when the text leaves something open that more lines could close: an unterminated string or block comment, an
-    /// unclosed '(' or '[', or a ':' block with no matching ';'. The 'meh', 'nah' and 'oops' colons continue a block that
+    /// unclosed '(' or '[', or a ':' block with no matching ';'. The 'elif', 'el' and 'catch' colons continue a block that
     /// is already open instead of opening a new one.
     /// </summary>
     public static bool IsIncomplete(string text)
@@ -186,7 +186,7 @@ public sealed class Repl
             {
                 case TokenKind.LParen or TokenKind.LBracket: brackets++; break;
                 case TokenKind.RParen or TokenKind.RBracket: brackets--; break;
-                case TokenKind.Meh or TokenKind.Nah or TokenKind.Oops: chainColon = true; break;
+                case TokenKind.Elif or TokenKind.Else or TokenKind.Catch: chainColon = true; break;
                 case TokenKind.Colon:
                     if (chainColon) chainColon = false; else blocks++;
                     break;

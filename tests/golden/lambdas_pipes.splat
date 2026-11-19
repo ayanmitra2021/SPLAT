@@ -9,4 +9,4 @@ nested := |x| |y| x + y
 n := |x| ||x||
 both := ||a|| or ||b||
 cmp := |a| a < 3 and a > 0
-net := lin(In, 64) >> gelu >> drop(0.1) >> lin(64, Out)
+net := lin(In, 64) >> gelu >> dropout(0.1) >> lin(64, Out)

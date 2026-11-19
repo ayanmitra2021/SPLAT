@@ -1,15 +1,15 @@
 # Fibonacci: naive recursion, an iterative version, and a pipe
-cook fib(n::i32)::i32:
-    hmm n < 2:
-        yeet n
+fn fib(n::i32)::i32:
+    if n < 2:
+        ret n
     ;
     fib(n - 1) + fib(n - 2)
 ;
 
-cook fib_iter(n::i32)::i64:
-    wag a::i64 = 0
-    wag b::i64 = 1
-    spin i in 0..n:
+fn fib_iter(n::i32)::i64:
+    var a::i64 = 0
+    var b::i64 = 1
+    loop i in 0..n:
         t := a + b
         a = b
         b = t
@@ -17,6 +17,6 @@ cook fib_iter(n::i32)::i64:
     a
 ;
 
-squish "fib(20) = {fib(20)}"
-squish "fib_iter(50) = {fib_iter(50)}"
-squish "piped: {10 |> fib}"
+print "fib(20) = {fib(20)}"
+print "fib_iter(50) = {fib_iter(50)}"
+print "piped: {10 |> fib}"

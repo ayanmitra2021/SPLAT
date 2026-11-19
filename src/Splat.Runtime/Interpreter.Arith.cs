@@ -51,10 +51,12 @@ public sealed partial class Interpreter
                     TokenKind.BangEq => Value.Bool(a.Bits != b.Bits),
                     _ => Ordered(op, a.Bits.CompareTo(b.Bits), span),
                 };
-            case VKind.Bit:
+            case VKind.Bool:
                 return op == TokenKind.EqEq ? Value.Bool(a.Bits == b.Bits) : Value.Bool(a.Bits != b.Bits);
-            case VKind.Zip:
+            case VKind.Unit:
                 return Value.Bool(op == TokenKind.EqEq);
+            case VKind.List or VKind.Set or VKind.Map or VKind.Tuple or VKind.Enum:
+                return CompoundBinary(op, a, b, span);
             default:
                 throw Fail(Templates.Internal(span, $"operator {op} on {a.TypeName}"));
         }
@@ -140,7 +142,7 @@ public sealed partial class Interpreter
         }
     }
 
-    // ---- explicit conversions: i64(x), mid(n), txt(v), char(code) ----
+    // ---- explicit conversions: i64(x), f32(n), txt(v), char(code) ----
 
     private Value Convert(Value v, PrimType target, SourceSpan span)
     {

@@ -13,17 +13,17 @@ public sealed class Lexer
 {
     private static readonly Dictionary<string, TokenKind> Keywords = new(StringComparer.Ordinal)
     {
-        ["wag"] = TokenKind.Wag, ["cook"] = TokenKind.Cook, ["yeet"] = TokenKind.Yeet,
-        ["hmm"] = TokenKind.Hmm, ["meh"] = TokenKind.Meh, ["nah"] = TokenKind.Nah,
-        ["spin"] = TokenKind.Spin, ["bail"] = TokenKind.Bail, ["skip"] = TokenKind.Skip, ["pick"] = TokenKind.Pick,
-        ["mold"] = TokenKind.Mold, ["from"] = TokenKind.From, ["with"] = TokenKind.With,
-        ["quirk"] = TokenKind.Quirk, ["teach"] = TokenKind.Teach, ["me"] = TokenKind.Me, ["elder"] = TokenKind.Elder,
-        ["birth"] = TokenKind.Birth, ["funeral"] = TokenKind.Funeral, ["secret"] = TokenKind.Secret,
-        ["mood"] = TokenKind.Mood, ["yolo"] = TokenKind.Yolo, ["oops"] = TokenKind.Oops, ["rip"] = TokenKind.Rip,
-        ["zone"] = TokenKind.Zone, ["nuke"] = TokenKind.Nuke, ["yoink"] = TokenKind.Yoink,
-        ["guess"] = TokenKind.Guess, ["judge"] = TokenKind.Judge, ["brain"] = TokenKind.Brain, ["grind"] = TokenKind.Grind,
+        ["var"] = TokenKind.Var, ["fn"] = TokenKind.Fn, ["ret"] = TokenKind.Return,
+        ["if"] = TokenKind.If, ["elif"] = TokenKind.Elif, ["el"] = TokenKind.Else,
+        ["loop"] = TokenKind.Loop, ["br"] = TokenKind.Break, ["cont"] = TokenKind.Continue, ["pick"] = TokenKind.Pick,
+        ["class"] = TokenKind.Class, ["from"] = TokenKind.From, ["with"] = TokenKind.With,
+        ["trait"] = TokenKind.Trait, ["extend"] = TokenKind.Extend, ["self"] = TokenKind.Self, ["super"] = TokenKind.Super,
+        ["init"] = TokenKind.Init, ["deinit"] = TokenKind.Deinit, ["secret"] = TokenKind.Secret,
+        ["enum"] = TokenKind.Enum, ["try"] = TokenKind.Try, ["catch"] = TokenKind.Catch, ["rip"] = TokenKind.Rip,
+        ["arena"] = TokenKind.Arena, ["drop"] = TokenKind.Drop, ["imp"] = TokenKind.Import,
+        ["regress"] = TokenKind.Regress, ["classify"] = TokenKind.Classify, ["network"] = TokenKind.Network, ["train"] = TokenKind.Train,
         ["fit"] = TokenKind.Fit, ["on"] = TokenKind.On, ["in"] = TokenKind.In, ["while"] = TokenKind.While,
-        ["and"] = TokenKind.And, ["or"] = TokenKind.Or, ["yep"] = TokenKind.Yep, ["nop"] = TokenKind.Nop,
+        ["and"] = TokenKind.And, ["or"] = TokenKind.Or, ["true"] = TokenKind.True, ["false"] = TokenKind.False,
         ["grad"] = TokenKind.Grad, ["intg"] = TokenKind.Intg, ["sum"] = TokenKind.Sum, ["prod"] = TokenKind.Prod,
     };
 
@@ -216,7 +216,7 @@ public sealed class Lexer
     private Token? ScanTick()
     {
         bool afterValue = _prev is TokenKind.Ident or TokenKind.RParen or TokenKind.RBracket
-            or TokenKind.Transpose or TokenKind.ConjTranspose or TokenKind.Me;
+            or TokenKind.Transpose or TokenKind.ConjTranspose or TokenKind.Self;
         if (!afterValue)
         {
             Report(Templates.BadCharacter(_src.Span(_pos, 1), '\'',
@@ -278,7 +278,7 @@ public sealed class Lexer
                 double d = double.Parse(clean, CultureInfo.InvariantCulture);
                 if (double.IsInfinity(d))
                 {
-                    Report(Templates.BadLiteral(_src.Span(start, _pos - start), "This float is too big for even a chonk.", "Use a smaller magnitude."));
+                    Report(Templates.BadLiteral(_src.Span(start, _pos - start), "This float is too big for even a f64.", "Use a smaller magnitude."));
                     d = 0;
                 }
                 value = d;

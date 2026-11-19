@@ -5,9 +5,9 @@
    |         ^^^^^^^^^^^^^^^^^^^^^^^^
   Fix: 'rip' is unrecoverable by design; fix the condition that led here.
   SPLAT stack trace (most recent call first):
-    at check  (called at bad_runtime_rip.splat:7:26)
-    at walk  (called at bad_runtime_rip.splat:7:37)
-    at walk  (called at bad_runtime_rip.splat:7:37)
-    at walk  (called at bad_runtime_rip.splat:7:37)
-    at walk  (called at bad_runtime_rip.splat:8:8)
+    at check  (called at bad_runtime_rip.splat:7:24)
+    at walk  (called at bad_runtime_rip.splat:7:35)
+    at walk  (called at bad_runtime_rip.splat:7:35)
+    at walk  (called at bad_runtime_rip.splat:7:35)
+    at walk  (called at bad_runtime_rip.splat:8:7)
 

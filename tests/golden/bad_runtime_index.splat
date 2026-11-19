@@ -1,0 +1,4 @@
+# Runtime errors for collections carry a span: an index past the end, and a missing map key.
+xs := [10, 20, 30]
+print xs[1]
+print xs[7]

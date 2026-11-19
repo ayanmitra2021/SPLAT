@@ -6,8 +6,10 @@ namespace Splat.Runtime;
 /// <summary>Runtime tag. The first sixteen values mirror <see cref="Prim"/>.</summary>
 public enum VKind : byte
 {
-    I8, I16, I32, I64, U8, U16, U32, U64, Usz, Smol, Mid, Chonk, Bit, Txt, Char, Zip,
+    I8, I16, I32, I64, U8, U16, U32, U64, Usize, F16, F32, F64, Bool, Txt, Char, Unit,
     Range, Func, Chain,
+    // Phase 7: collections and ADTs
+    List, Set, Map, Tuple, Enum,
 }
 
 /// <summary>
@@ -23,8 +25,8 @@ public readonly struct Value
 
     private Value(VKind kind, long bits, object? obj) { Kind = kind; Bits = bits; Ref = obj; }
 
-    public static readonly Value Unit = new(VKind.Zip, 0, null);
-    public static Value Bool(bool b) => new(VKind.Bit, b ? 1 : 0, null);
+    public static readonly Value Unit = new(VKind.Unit, 0, null);
+    public static Value Bool(bool b) => new(VKind.Bool, b ? 1 : 0, null);
     public static Value Int(VKind kind, long bits) => new(kind, bits, null);
     public static Value Char(int codePoint) => new(VKind.Char, codePoint, null);
     public static Value Str(string s) => new(VKind.Txt, 0, s);
@@ -33,14 +35,19 @@ public readonly struct Value
     public static Value Func(object closure) => new(VKind.Func, 0, closure);
     /// <summary>A <c>then</c> chain: its parts are iterated one after another.</summary>
     public static Value Chain(Value[] parts) => new(VKind.Chain, 0, parts);
+    public static Value List(SplatList list) => new(VKind.List, 0, list);
+    public static Value Set(SplatSet set) => new(VKind.Set, 0, set);
+    public static Value Map(SplatMap map) => new(VKind.Map, 0, map);
+    public static Value Tuple(Value[] items) => new(VKind.Tuple, 0, items);
+    public static Value Enum(EnumValue ev) => new(VKind.Enum, 0, ev);
 
     /// <summary>A float of the given kind, rounded to that kind's precision.</summary>
     public static Value Float(VKind kind, double d) => new(kind, BitConverter.DoubleToInt64Bits(Round(kind, d)), null);
 
     public static double Round(VKind kind, double d) => kind switch
     {
-        VKind.Mid => (double)(float)d,
-        VKind.Smol => (double)(Half)d,
+        VKind.F32 => (double)(float)d,
+        VKind.F16 => (double)(Half)d,
         _ => d,
     };
 
@@ -49,10 +56,15 @@ public readonly struct Value
     public string AsString => (string)Ref!;
     public RangeData AsRange => (RangeData)Ref!;
     public Value[] AsChain => (Value[])Ref!;
+    public SplatList AsList => (SplatList)Ref!;
+    public SplatSet AsSet => (SplatSet)Ref!;
+    public SplatMap AsMap => (SplatMap)Ref!;
+    public Value[] AsTuple => (Value[])Ref!;
+    public EnumValue AsEnum => (EnumValue)Ref!;
 
-    public bool IsInt => Kind <= VKind.Usz;
-    public bool IsUnsigned => Kind is >= VKind.U8 and <= VKind.Usz;
-    public bool IsFloat => Kind is VKind.Smol or VKind.Mid or VKind.Chonk;
+    public bool IsInt => Kind <= VKind.Usize;
+    public bool IsUnsigned => Kind is >= VKind.U8 and <= VKind.Usize;
+    public bool IsFloat => Kind is VKind.F16 or VKind.F32 or VKind.F64;
 
     /// <summary>An integer value as a 128-bit number (so every integer type, including u64, is exact).</summary>
     public Int128 AsInt128 => IsUnsigned ? (Int128)(ulong)Bits : (Int128)Bits;
@@ -63,8 +75,13 @@ public readonly struct Value
     public string TypeName => Kind switch
     {
         VKind.Range => "range",
-        VKind.Func => "cook",
+        VKind.Func => "fn",
         VKind.Chain => "chain",
+        VKind.List => "List",
+        VKind.Set => "Set",
+        VKind.Map => "Map",
+        VKind.Tuple => "tuple",
+        VKind.Enum => AsEnum.EnumName,
         _ => Types.Of((Prim)(int)Kind).Name,
     };
 
@@ -106,29 +123,129 @@ public sealed record RangeData(Value Lo, Value Hi, bool Inclusive, Int128 Step, 
     }
 }
 
+// ---- Phase 7: collection and ADT types ----
+
+public sealed class SplatList
+{
+    public List<Value> Items { get; } = new();
+}
+
+public sealed class SplatSet
+{
+    private readonly Dictionary<Value, int> _index = new(ValueKeyComparer.Instance);
+    private readonly List<Value> _order = new();
+
+    public bool Add(Value v) {
+        if (_index.ContainsKey(v)) return false;
+        _index[v] = _order.Count;
+        _order.Add(v);
+        return true;
+    }
+    public bool Contains(Value v) => _index.ContainsKey(v);
+    public bool Remove(Value v)
+    {
+        if (!_index.TryGetValue(v, out int at)) return false;
+        _order.RemoveAt(at);
+        _index.Clear();
+        for (int i = 0; i < _order.Count; i++) _index[_order[i]] = i;
+        return true;
+    }
+    public IReadOnlyList<Value> Items => _order;
+    public int Count => _order.Count;
+}
+
+public sealed class SplatMap
+{
+    private readonly Dictionary<Value, int> _index = new(ValueKeyComparer.Instance);
+    private readonly List<(Value Key, Value Val)> _order = new();
+
+    public void Set(Value k, Value v) {
+        if (_index.TryGetValue(k, out int i)) { _order[i] = (k, v); return; }
+        _index[k] = _order.Count;
+        _order.Add((k, v));
+    }
+    public bool TryGet(Value k, out Value v) {
+        if (_index.TryGetValue(k, out int i)) { v = _order[i].Val; return true; }
+        v = default; return false;
+    }
+    public bool ContainsKey(Value k) => _index.ContainsKey(k);
+    public bool Remove(Value k)
+    {
+        if (!_index.TryGetValue(k, out int at)) return false;
+        _order.RemoveAt(at);
+        _index.Clear();
+        for (int i = 0; i < _order.Count; i++) _index[_order[i].Key] = i;
+        return true;
+    }
+    public IReadOnlyList<(Value Key, Value Val)> Items => _order;
+    public int Count => _order.Count;
+}
+
+public sealed class EnumValue
+{
+    public string EnumName { get; }
+    public string VariantName { get; }
+    public Value[] Payloads { get; }
+    public int PayloadCount => Payloads.Length;
+    public EnumValue(string moodName, string variantName, Value[] payloads)
+    { EnumName = moodName; VariantName = variantName; Payloads = payloads; }
+}
+
+public sealed class ValueKeyComparer : IEqualityComparer<Value>
+{
+    public static readonly ValueKeyComparer Instance = new();
+
+    public bool Equals(Value a, Value b)
+    {
+        if (a.Kind != b.Kind) return false;
+        return a.Kind switch
+        {
+            VKind.Txt => string.Equals(a.AsString, b.AsString, StringComparison.Ordinal),
+            VKind.Tuple => a.AsTuple.Length == b.AsTuple.Length && a.AsTuple.Zip(b.AsTuple).All(p => Equals(p.First, p.Second)),
+            _ when (int)a.Kind <= (int)VKind.Usize || a.Kind is VKind.Bool or VKind.Char => a.Bits == b.Bits,
+            _ => false,
+        };
+    }
+
+    public int GetHashCode(Value v) => v.Kind switch
+    {
+        VKind.Txt => v.AsString.GetHashCode(StringComparison.Ordinal),
+        VKind.Tuple => v.AsTuple.Aggregate(0, (h, x) => HashCode.Combine(h, GetHashCode(x))),
+        _ when (int)v.Kind <= (int)VKind.Usize || v.Kind is VKind.Bool or VKind.Char => v.Bits.GetHashCode(),
+        _ => 0,
+    };
+}
+
 internal static class Kinds
 {
     public static Prim P(VKind k) => (Prim)(int)k;
-    public static bool IsUnsigned(VKind k) => k is >= VKind.U8 and <= VKind.Usz;
+    public static bool IsUnsigned(VKind k) => k is >= VKind.U8 and <= VKind.Usize;
     public static bool IsSigned(VKind k) => k <= VKind.I64;
-    public static bool IsInt(VKind k) => k <= VKind.Usz;
-    public static bool IsFloat(VKind k) => k is VKind.Smol or VKind.Mid or VKind.Chonk;
+    public static bool IsInt(VKind k) => k <= VKind.Usize;
+    public static bool IsFloat(VKind k) => k is VKind.F16 or VKind.F32 or VKind.F64;
     public static string Name(VKind k) => Types.Of(P(k)).Name;
-    public static VKind Of(SType t) => t is PrimType p ? (VKind)(int)p.Kind : VKind.Zip;
+    public static VKind Of(SType t) => t is PrimType p ? (VKind)(int)p.Kind : VKind.Unit;
 }
 
-/// <summary>Turns values into text for <c>squish</c>, <c>txt(x)</c> and string templates.</summary>
+/// <summary>Turns values into text for <c>print</c>, <c>txt(x)</c> and string templates.</summary>
 public static class Formatter
 {
     public static string Display(Value v) => v.Kind switch
     {
-        VKind.Bit => v.AsBool ? "yep" : "nop",
+        VKind.Bool => v.AsBool ? "true" : "false",
         VKind.Txt => v.AsString,
         VKind.Char => char.ConvertFromUtf32((int)v.Bits),
-        VKind.Zip => "()",
+        VKind.Unit => "()",
         VKind.Range => RangeText(v.AsRange),
-        VKind.Func => "<cook>",
+        VKind.Func => "<fn>",
         VKind.Chain => string.Join(" then ", v.AsChain.Select(Display)),
+        VKind.List => "[" + string.Join(", ", v.AsList.Items.Select(Display)) + "]",
+        VKind.Set => "set{" + string.Join(", ", v.AsSet.Items.Select(Display)) + "}",
+        VKind.Map => "map{" + string.Join(", ", v.AsMap.Items.Select(p => Display(p.Key) + ": " + Display(p.Val))) + "}",
+        VKind.Tuple => "(" + string.Join(", ", v.AsTuple.Select(Display)) + ")",
+        VKind.Enum => v.AsEnum.PayloadCount == 0
+            ? v.AsEnum.VariantName
+            : v.AsEnum.VariantName + "(" + string.Join(", ", v.AsEnum.Payloads.Select(Display)) + ")",
         _ when v.IsInt => v.AsInt128.ToString(CultureInfo.InvariantCulture),
         _ => FloatText(v.Kind, v.AsDouble),
     };
@@ -155,8 +272,8 @@ public static class Formatter
         if (double.IsNegativeInfinity(d)) return "-inf";
         string s = kind switch
         {
-            VKind.Mid => ((float)d).ToString("R", CultureInfo.InvariantCulture),
-            VKind.Smol => ((Half)d).ToString(CultureInfo.InvariantCulture),
+            VKind.F32 => ((float)d).ToString("R", CultureInfo.InvariantCulture),
+            VKind.F16 => ((Half)d).ToString(CultureInfo.InvariantCulture),
             _ => d.ToString("R", CultureInfo.InvariantCulture),
         };
         // 3 prints as "3.0" so a float never looks like an int.

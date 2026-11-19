@@ -83,7 +83,8 @@ public static class Program
             ? (Pipeline.Check(source, diag) ? RunOutcome.Ok : RunOutcome.CompileError)
             : Pipeline.Run(source, diag, Console.Out, Console.Error, Console.In);
 
-        if (outcome != RunOutcome.Ok) ConsolePrinter.ForStdErr().Print(diag);
+        // Warnings (an unreachable pick arm, say) are shown even when the program is fine.
+        if (outcome != RunOutcome.Ok || diag.Diagnostics.Count > 0) ConsolePrinter.ForStdErr().Print(diag);
         return outcome switch { RunOutcome.Ok => 0, RunOutcome.CompileError => 65, _ => 70 };
     }
 

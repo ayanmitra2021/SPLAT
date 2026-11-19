@@ -98,7 +98,8 @@ public static class AstPrinter
         NamedType n => SNode.L(n.Name, n.Args.Select(Type)),
         TensorType tt => SNode.L("tensor", [Type(tt.Element), .. tt.Dims.Select(Dimension)]),
         RefType r => SNode.L(r.IsPoke ? "~" : "&", [Type(r.Inner)]),
-        FuncType f => SNode.L("cook-type", [SNode.L("params", f.Params.Select(Type)), .. f.Return is null ? [] : new[] { Type(f.Return) }]),
+        TupleType tu => SNode.L("tuple-type", tu.Items.Select(Type)),
+        FuncType f => SNode.L("fn-type", [SNode.L("params", f.Params.Select(Type)), .. f.Return is null ? [] : new[] { Type(f.Return) }]),
         _ => SNode.A("?type"),
     };
 
@@ -116,7 +117,7 @@ public static class AstPrinter
         IntLiteral i => SNode.A(i.Value.ToString(CultureInfo.InvariantCulture)),
         FloatLiteral f => SNode.A(FloatText(f.Value)),
         CharLiteral c => SNode.A($"c\"{char.ConvertFromUtf32(c.Value).Replace("\n", "\\n").Replace("\"", "\\\"").Replace("\\", "\\\\")}\""),
-        BoolLiteral b => SNode.A(b.Value ? "yep" : "nop"),
+        BoolLiteral b => SNode.A(b.Value ? "true" : "false"),
         UnitLiteral => SNode.A("()"),
         StringTemplate s => Template(s),
         NameExpr n => SNode.A(n.Name),
@@ -136,12 +137,34 @@ public static class AstPrinter
             .. i.Options.Count == 0 ? [] : new[] { SNode.L("opts", i.Options.Select(Argument)) },
             Expr(i.Integrand)]),
         ReduceExpr r => SNode.L(r.IsProduct ? "prod" : "sum", [SNode.A(r.Variable), Expr(r.Range), Expr(r.Body)]),
-        FitExpr f => SNode.L(f.IsJudge ? "judge" : "guess", [SNode.L("config", f.Config.Select(Argument)), Expr(f.Features), Expr(f.Targets)]),
+        FitExpr f => SNode.L(f.IsClassify ? "classify" : "regress", [SNode.L("config", f.Config.Select(Argument)), Expr(f.Features), Expr(f.Targets)]),
         StepExpr s => SNode.L("by", [Expr(s.Range), Expr(s.Step)]),
         ChainExpr c => SNode.L("then", c.Parts.Select(Expr)),
         ParenListExpr l => SNode.L("members", l.Items.Select(Expr)),
+        PickExpr p => SNode.L("pick", [Expr(p.Subject), .. p.Arms.Select(Arm)]),
+        TupleExpr t => SNode.L("tuple", t.Items.Select(Expr)),
+        PairExpr pr => SNode.L("pair", [Expr(pr.Key), Expr(pr.Value)]),
         ErrorExpr => SNode.A("(error)"),
         _ => SNode.A("?expr"),
+    };
+
+    private static SNode Arm(PickArm a)
+    {
+        var pat = Pat(a.Pat);
+        if (a.ExprBody is not null) return SNode.L("arm", [pat, Expr(a.ExprBody)]);
+        return SNode.L("arm", [pat, Block(a.BlockBody!)]);
+    }
+
+    private static SNode Pat(Pattern p) => p switch
+    {
+        WildcardPat => SNode.A("_"),
+        BindPat b => SNode.A(b.Name),
+        LiteralPat l => Expr(l.Value),
+        VariantPat v when v.Bindings.Count == 0 => SNode.A(v.VariantName),
+        VariantPat v => SNode.L(v.VariantName, v.Bindings.Select(Pat)),
+        RangePat r => SNode.L(r.Inclusive ? "..=" : "..", [Expr(r.Lo), Expr(r.Hi)]),
+        TuplePat t => SNode.L("tuple-pat", t.Items.Select(Pat)),
+        _ => SNode.A("?pat"),
     };
 
     public static string NormText(NormKind k) => k switch
@@ -170,30 +193,35 @@ public static class AstPrinter
 
     public static SNode Stmt(Stmt s) => s switch
     {
-        BindStmt b => SNode.L(b.IsMutable ? "wag" : "bind",
+        BindStmt b => SNode.L(b.IsMutable ? "var" : "bind",
             [SNode.A(b.Name), .. b.Type is null ? [] : new[] { SNode.L(":", [Type(b.Type)]) }, Expr(b.Value)]),
         AssignStmt a => SNode.L(OpText(a.Op), [Expr(a.Target), Expr(a.Value)]),
         ExprStmt e => Expr(e.Expression),
-        CookDecl c => Cook(c),
-        YeetStmt y => y.Value is null ? SNode.L("yeet") : SNode.L("yeet", [Expr(y.Value)]),
+        FnDecl c => Fn(c),
+        ReturnStmt y => y.Value is null ? SNode.L("ret") : SNode.L("ret", [Expr(y.Value)]),
         RipStmt r => r.Message is null ? SNode.L("rip") : SNode.L("rip", [Expr(r.Message)]),
-        BailStmt => SNode.L("bail"),
-        SkipStmt => SNode.L("skip"),
-        HmmStmt h => SNode.L("hmm", [
+        BreakStmt => SNode.L("br"),
+        ContinueStmt => SNode.L("cont"),
+        IfStmt h => SNode.L("if", [
             .. h.Branches.Select(b => SNode.L("if", [Expr(b.Condition), Block(b.Body)])),
             .. h.Else is null ? [] : new[] { SNode.L("else", [Block(h.Else)]) }]),
-        SpinStmt sp => sp.Kind switch
+        LoopStmt sp => sp.Kind switch
         {
-            SpinKind.Forever => SNode.L("spin", [Block(sp.Body)]),
-            SpinKind.While => SNode.L("spin-while", [Expr(sp.Subject!), Block(sp.Body)]),
-            _ => SNode.L("spin-in", [SNode.A(sp.Variable!), Expr(sp.Subject!), Block(sp.Body)]),
+            LoopKind.Forever => SNode.L("loop", [Block(sp.Body)]),
+            LoopKind.While => SNode.L("loop-while", [Expr(sp.Subject!), Block(sp.Body)]),
+            _ => SNode.L("loop-in", [SNode.A(sp.Variable!), Expr(sp.Subject!), Block(sp.Body)]),
         },
         ReservedStmt r => SNode.L("reserved", [SNode.A(r.Keyword)]),
+        EnumDecl m => SNode.L("enum", [SNode.A(m.Name),
+            .. m.Generics.Count == 0 ? [] : new[] { SNode.L("generics", m.Generics.Select(g => SNode.A(g.Name))) },
+            .. m.Variants.Select(v => v.Payloads.Count == 0 ? SNode.A(v.Name) : SNode.L(v.Name, v.Payloads.Select(Type)))]),
+        TupleBindStmt tb => SNode.L(tb.IsMutable ? "var-tuple" : "bind-tuple",
+            [SNode.L("names", tb.Names.Select(SNode.A)), Expr(tb.Value)]),
         ErrorStmt => SNode.A("(error)"),
         _ => SNode.A("?stmt"),
     };
 
-    private static SNode Cook(CookDecl c)
+    private static SNode Fn(FnDecl c)
     {
         var items = new List<SNode> { SNode.A(c.Name) };
         if (c.Generics.Count > 0)
@@ -201,13 +229,13 @@ public static class AstPrinter
         items.Add(SNode.L("params", c.Params.Select(Parameter)));
         if (c.ReturnType is not null) items.Add(SNode.L("->", [Type(c.ReturnType)]));
         items.Add(c.ExprBody is not null ? SNode.L("=", [Expr(c.ExprBody)]) : Block(c.BlockBody!));
-        return SNode.L("cook", items);
+        return SNode.L("fn", items);
     }
 
     private static SNode Parameter(Param p)
     {
         if (p.Kind != ParamKind.Normal)
-            return SNode.A(p.Kind switch { ParamKind.PeekMe => "&me", ParamKind.PokeMe => "~me", _ => "me" });
+            return SNode.A(p.Kind switch { ParamKind.PeekSelf => "&self", ParamKind.PokeSelf => "~self", _ => "self" });
         var items = new List<SNode> { SNode.A(p.Name), Type(p.Type!) };
         if (p.Default is not null) items.Add(Expr(p.Default));
         return SNode.L(items.ToArray());

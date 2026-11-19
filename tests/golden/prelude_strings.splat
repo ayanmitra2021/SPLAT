@@ -1,12 +1,26 @@
 # Prelude string helpers and parse functions
 s := "  Hello, SPLAT  "
-squish "[{trim(s)}] [{upper(s)}] [{lower(s)}]"
-squish len("héllo"), len(""), len(trim(s))
-n := parse_i32("42") + 1
-big := parse_i64("-9000000000")
-x := parse_mid("2.5") * 2.0
-y := parse_chonk(" 1e3 ")
-squish n, big, x, y
-squish "text" |> upper |> len
+print "[{trim(s)}] [{upper(s)}] [{lower(s)}]"
+print len("héllo"), len(""), len(trim(s))
+# The parse functions return Maybe: Got(value), or Nada when the text is not a number of that type.
+n := pick parse_i32("42"):
+    Got(v) => v + 1,
+    Nada => 0
+;
+big := pick parse_i64("-9000000000"):
+    Got(v) => v,
+    Nada => 0
+;
+x := pick parse_mid("2.5"):
+    Got(v) => v * 2.0,
+    Nada => 0.0
+;
+y := pick parse_chonk(" 1e3 "):
+    Got(v) => v,
+    Nada => 0.0
+;
+print n, big, x, y
+print parse_i32("twelve"), parse_mid("NaN"), parse_i32("2147483648")
+print "text" |> upper |> len
 total := len("abc") + len("de")
-squish "total {total}"
+print "total {total}"

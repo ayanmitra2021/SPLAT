@@ -1,0 +1,83 @@
+# Pattern kinds: integer literals and ranges, chars, bool tuples, nested variants. All of these are checked for
+# exhaustiveness at compile time, so there is no wildcard where the patterns already cover every case.
+fn grade(score::i32)::txt:
+    pick score:
+        0 => "zero",
+        1..=59 => "fail",
+        60..=89 => "pass",
+        90..=100 => "top",
+        _ => "out of range"
+    ;
+;
+print grade(0), grade(42), grade(75), grade(100), grade(101), grade(-3)
+
+fn kind(c::char)::txt:
+    pick c:
+        c"a"..=c"z" => "lower",
+        c"A"..=c"Z" => "upper",
+        c"0"..=c"9" => "digit",
+        _ => "other"
+    ;
+;
+print kind(c"q"), kind(c"Q"), kind(c"7"), kind(c"!")
+
+fn fizz(i::i32)::txt:
+    pick (i % 3 == 0, i % 5 == 0):
+        (true, true) => "FizzBuzz",
+        (true, false) => "Fizz",
+        (false, true) => "Buzz",
+        (false, false) => "{i}"
+    ;
+;
+print fizz(9), fizz(10), fizz(15), fizz(7)
+
+fn describe(p::(Maybe<i32>, Maybe<i32>))::txt:
+    pick p:
+        (Got(a), Got(b)) => "both {a + b}",
+        (Got(a), Nada) => "left {a}",
+        (Nada, Got(b)) => "right {b}",
+        (Nada, Nada) => "neither"
+    ;
+;
+print describe((Got(1), Got(2))), describe((Got(1), Nada)), describe((Nada, Got(5))), describe((Nada, Nada))
+
+fn yes_no(b::bool)::txt:
+    pick b:
+        true => "yes",
+        false => "no"
+    ;
+;
+print yes_no(true), yes_no(1 > 2)
+
+# Arms can be statement blocks: `Pattern:` ... `;`
+fn announce(m::Maybe<txt>):
+    pick m:
+        Got(s):
+            print "got a txt"
+            print "its length is", len(s)
+        ;
+        Nada => print "nothing to announce"
+    ;
+;
+announce(Got("hello"))
+announce(Nada)
+
+# Text patterns need a catch-all: txt has no finite set of values.
+fn color_code(name::txt)::i32:
+    pick name:
+        "red" => 1,
+        "green" => 2,
+        _ => 0
+    ;
+;
+print color_code("red"), color_code("green"), color_code("mauve")
+
+# A binding pattern names the value and covers everything.
+fn sign(n::i32)::txt:
+    pick n:
+        0 => "zero",
+        other => hmm_free(other)
+    ;
+;
+fn hmm_free(n::i32)::txt = "{n} (not zero)"
+print sign(0), sign(5)

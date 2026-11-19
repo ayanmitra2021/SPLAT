@@ -2,11 +2,11 @@
 a::i32 = "hello"
 b := 1 + "one"
 c := 3 + 2.5
-d::mid = 42
-hmm 1:
-    squish "never runs"
+d::f32 = 42
+if 1:
+    print "never runs"
 ;
-cook f(x::i32)::i32 = x
+fn f(x::i32)::i32 = x
 e := f(1, 2)
 g := f("s")
 h := undefined_name + 1
@@ -14,15 +14,15 @@ u::u8 = 7
 i := -u
 x := 5
 x = 6
-cook half(n::i32)::i32:
-    hmm n > 0:
-        yeet n
+fn half(n::i32)::i32:
+    if n > 0:
+        ret n
     ;
 ;
 j := !5
 k::i8 = 300
-bail
-yeet 1
-cook r(n::i32) = r(n - 1)
+br
+ret 1
+fn r(n::i32) = r(n - 1)
 m := "v = {x:.2}"
 n := 99999999999

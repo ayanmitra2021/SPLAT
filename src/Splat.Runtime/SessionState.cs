@@ -4,7 +4,7 @@ using Splat.Syntax;
 
 namespace Splat.Runtime;
 
-/// <summary>What one REPL entry did. <see cref="Echo"/> is the <c>=> value :: type</c> line for a non-<c>zip</c> expression statement.</summary>
+/// <summary>What one REPL entry did. <see cref="Echo"/> is the <c>=> value :: type</c> line for a non-<c>unit</c> expression statement.</summary>
 public sealed record EvalResult(RunOutcome Outcome, DiagnosticEngine Diagnostics, string? Echo);
 
 /// <summary>
@@ -13,7 +13,7 @@ public sealed record EvalResult(RunOutcome Outcome, DiagnosticEngine Diagnostics
 /// <para>
 /// Entries are transactional. Each runs against a fresh scope chained onto the previous committed entry; only when it
 /// parses, type-checks AND runs without error does that scope become the new tip of the chain. A failed entry leaves no
-/// new bindings behind and restores the values of session <c>wag</c> variables it had already assigned. (State captured
+/// new bindings behind and restores the values of session <c>var</c> variables it had already assigned. (State captured
 /// inside a closure's own scope is not rolled back.)
 /// </para>
 /// Redefining a top-level name in a later entry is allowed and shadows it for new code. Functions defined earlier keep
@@ -27,6 +27,7 @@ public sealed class SessionState
     private readonly TextWriter _stderr;
     private TypeInfo _info = new();
     private Scope _scope = new();
+    private EnumRegistry _moods = EnumRegistry.Builtin;
     private Interpreter _interpreter;
     private Env _env;
 
@@ -49,6 +50,7 @@ public sealed class SessionState
     {
         _info = new TypeInfo();
         _scope = new Scope();
+        _moods = EnumRegistry.Builtin;
         _interpreter = NewInterpreter();
         _env = _interpreter.Globals;
     }
@@ -64,7 +66,8 @@ public sealed class SessionState
         if (diag.HasErrors) return new EvalResult(RunOutcome.CompileError, diag, null);
 
         var entryScope = new Scope(_scope);
-        new TypeChecker(diag, entryScope, _info).CheckProgram(program);
+        var entryEnums = new EnumRegistry(_moods);
+        new TypeChecker(diag, entryScope, _info, entryEnums).CheckProgram(program);
         if (diag.HasErrors) return new EvalResult(RunOutcome.CompileError, diag, null);
 
         var entryEnv = new Env(_env);
@@ -77,11 +80,12 @@ public sealed class SessionState
 
         // Success: this entry's scopes become the tip that the next entry chains onto.
         _scope = entryScope;
+        _moods = entryEnums;
         _env = entryEnv;
 
         string? echoText = null;
         if (echo && last is { } v && program.Statements[^1] is ExprStmt es
-            && _info.TypeOf(es.Expression) is { } type && !type.Equals(Types.Zip))
+            && _info.TypeOf(es.Expression) is { } type && !type.Equals(Types.Unit))
             echoText = $"=> {Formatter.Repr(v)} :: {type.Name}";
         return new EvalResult(RunOutcome.Ok, diag, echoText);
     }

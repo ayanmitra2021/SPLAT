@@ -62,10 +62,10 @@ public class ConsolePrinterTests
     [Fact]
     public void Caret_SitsUnderSpan()
     {
-        var src = new SourceText("t.splat", "wag x = 1 +\n");
+        var src = new SourceText("t.splat", "var x = 1 +\n");
         var d = Templates.TypeMismatch(src.Span(4, 1), "txt", "i32");
         var caret = CaretLine(Render(src, d));
-        // " 1 | wag x = 1 +" -> caret under the 'x' at column 5, i.e. 4 spaces after the "| " gutter.
+        // " 1 | var x = 1 +" -> caret under the 'x' at column 5, i.e. 4 spaces after the "| " gutter.
         Assert.EndsWith("|     ^", caret.TrimEnd());
     }
 
@@ -84,11 +84,11 @@ public class ConsolePrinterTests
     [Fact]
     public void SpanAtEndOfFile_StillShowsOneCaret()
     {
-        var src = new SourceText("t.splat", "spin i in 0..3:\n    squish i");
+        var src = new SourceText("t.splat", "loop i in 0..3:\n    print i");
         var span = src.Span(src.Text.Length, 0);
         var rendered = Render(src, Templates.MissingSemicolon(span, openLine: 1));
         Assert.Equal(1, CaretLine(rendered).Count(c => c == '^'));
-        Assert.Contains("squish i", rendered);
+        Assert.Contains("print i", rendered);
         Assert.Contains("Fix: Add ';' to close the block opened on line 1.", rendered);
     }
 
@@ -149,22 +149,22 @@ public class TemplateTests
             "💀 OOF [Line 7]: You opened a ':' and walked away like an unfinished text message. Expected ';' to close your thought, Shakespeare.",
             Templates.MissingSemicolon(At7, 3).Message);
         Assert.Equal(
-            "📐 GEOMETRY CRIME [Line 7]: Tried to '@' a 'mid[3, 4]' with a 'mid[5, 2]'. 4 != 5. Even in parallel universes, these matrices cannot hug. Tip: Transpose with \"'\"?",
-            Templates.ShapeMismatch(At7, "mid[3, 4]", "mid[5, 2]", "4", "5").Message);
+            "📐 GEOMETRY CRIME [Line 7]: Tried to '@' a 'f32[3, 4]' with a 'f32[5, 2]'. 4 != 5. Even in parallel universes, these matrices cannot hug. Tip: Transpose with \"'\"?",
+            Templates.ShapeMismatch(At7, "f32[3, 4]", "f32[5, 2]", "4", "5").Message);
         Assert.Equal(
             "🎭 IDENTITY CRISIS [Line 7]: Tried to shove a 'txt' into a 'i32' slot. I'm strictly typed, bestie.",
             Templates.TypeMismatch(At7, "txt", "i32").Message);
         Assert.Equal(
-            "👻 GHOST HUNTING [Line 7]: Tried to access 'v' after it died/moved on Line 2. We already held its funeral. Fix: Borrow with '&v' instead.",
+            "👻 GHOST HUNTING [Line 7]: Tried to access 'v' after it died/moved on Line 2. We already held its deinit. Fix: Borrow with '&v' instead.",
             Templates.UseAfterMove(At7, "v", 2).Message);
         Assert.Equal(
-            "🚧 CONTAINMENT BREACH [Line 7]: Borrowed reference to 'r' tried to sneak out of zone 'z'. Values cannot outlive their arena.",
-            Templates.ZoneEscape(At7, "r", "z").Message);
+            "🚧 CONTAINMENT BREACH [Line 7]: Borrowed reference to 'r' tried to sneak out of arena 'z'. Values cannot outlive their arena.",
+            Templates.ArenaEscape(At7, "r", "z").Message);
         Assert.Equal(
             "🌋 MATH MELTDOWN [Runtime @ epoch 12]: Loss became NaN (Not a Number, Not a Good Time). Tip: Lower your learning rate; your weights are orbiting Mars.",
             Templates.NanMeltdown(SourceSpan.None, 12).Message);
         Assert.Equal(
-            "🕵️ DETECTIVE FAIL [Runtime]: Looked everywhere for \"a.csv\" and found pure emptiness. Fix: Check path or wrap in 'yolo: ... oops e: ... ;'.",
+            "🕵️ DETECTIVE FAIL [Runtime]: Looked everywhere for \"a.csv\" and found pure emptiness. Fix: Check path or wrap in 'try: ... catch e: ... ;'.",
             Templates.FileNotFound(SourceSpan.None, "a.csv").Message);
     }
 
@@ -181,12 +181,12 @@ public class TemplateTests
         {
             Templates.MissingSemicolon(At7, 1), Templates.ShapeMismatch(At7, "a", "b", "1", "2"),
             Templates.TypeMismatch(At7, "a", "b"), Templates.UseAfterMove(At7, "x", 1),
-            Templates.ZoneEscape(At7, "x", "z"), Templates.NanMeltdown(At7, 1), Templates.FileNotFound(At7, "p"),
+            Templates.ArenaEscape(At7, "x", "z"), Templates.NanMeltdown(At7, 1), Templates.FileNotFound(At7, "p"),
             Templates.UnexpectedToken(At7, "}", "a statement"), Templates.UnterminatedString(At7),
             Templates.UnterminatedComment(At7), Templates.BadCharacter(At7, '$'), Templates.BadLiteral(At7, "bad", "fix"),
             Templates.UndefinedName(At7, "q"),
             Templates.WrongArgCount(At7, "f", 1, 2), Templates.DivideByZero(At7), Templates.ImmutableAssign(At7, "x"),
-            Templates.StackOverflow(At7, 1000), Templates.Internal(At7, "oops"),
+            Templates.StackOverflow(At7, 1000), Templates.Internal(At7, "catch"),
         };
         Assert.All(all, d => { Assert.False(string.IsNullOrWhiteSpace(d.Fix)); Assert.NotEmpty(d.Message); });
         Assert.Equal(all.Length, all.Select(d => d.Category).Distinct().Count());
@@ -229,11 +229,11 @@ public class DiagnosticEngineTests
     public void PrinterUsesRegisteredSources()
     {
         var e = new DiagnosticEngine();
-        var src = new SourceText("a.splat", "oops here");
+        var src = new SourceText("a.splat", "catch here");
         e.AddSource(src);
         e.Report(Templates.UndefinedName(src.Span(5, 4), "here"));
         var sw = new StringWriter();
         new ConsolePrinter(sw, false).Print(e);
-        Assert.Contains("oops here", sw.ToString());
+        Assert.Contains("catch here", sw.ToString());
     }
 }

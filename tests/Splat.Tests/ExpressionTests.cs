@@ -3,7 +3,7 @@ using Splat.Syntax;
 
 namespace Splat.Tests;
 
-/// <summary>Phase 4: the full spec 8.1 operator table, lambdas, norms, calculus, reductions and guess/judge.</summary>
+/// <summary>Phase 4: the full spec 8.1 operator table, lambdas, norms, calculus, reductions and regress/classify.</summary>
 public class PrattPrecedenceTests
 {
     // Together with ParserExpressionTests.Precedence (38 cases) this is the 60+ case precedence table.
@@ -182,13 +182,13 @@ public class CalculusAndAiTests
     [InlineData("∑[i in xs] i", "(sum i xs i)")]
     [InlineData("sum(v) + prod(w)", "(+ (call sum v) (call prod w))")]
     [InlineData("map(xs, sum)", "(call map xs sum)")]
-    [InlineData("guess(ridge = 0.05) fit (X, y)", "(guess (config (arg ridge 0.05)) X y)")]
-    [InlineData("guess(linear) fit (X, y)", "(guess (config linear) X y)")]
-    [InlineData("guess() fit (X, y)", "(guess (config) X y)")]
-    [InlineData("judge(svm(kernel = \"rbf\")) fit (X, y)", "(judge (config (call svm (arg kernel \"rbf\"))) X y)")]
-    [InlineData("judge(knn(k = 5)) fit (X[:, 0..2], y)", "(judge (config (call knn (arg k 5))) (index X : (.. 0 2)) y)")]
+    [InlineData("regress(ridge = 0.05) fit (X, y)", "(regress (config (arg ridge 0.05)) X y)")]
+    [InlineData("regress(linear) fit (X, y)", "(regress (config linear) X y)")]
+    [InlineData("regress() fit (X, y)", "(regress (config) X y)")]
+    [InlineData("classify(svm(kernel = \"rbf\")) fit (X, y)", "(classify (config (call svm (arg kernel \"rbf\"))) X y)")]
+    [InlineData("classify(knn(k = 5)) fit (X[:, 0..2], y)", "(classify (config (call knn (arg k 5))) (index X : (.. 0 2)) y)")]
     [InlineData("model(&X_test)", "(call model (& X_test))")]
-    [InlineData("guess(ridge = 0.1) fit (X, y)(&Z)", "(call (guess (config (arg ridge 0.1)) X y) (& Z))")]
+    [InlineData("regress(ridge = 0.1) fit (X, y)(&Z)", "(call (regress (config (arg ridge 0.1)) X y) (& Z))")]
     [InlineData("clf.acc(&X_test, &y_test)", "(call (. clf acc) (& X_test) (& y_test))")]
     [InlineData("\"{a + b:.3} and {f(x)}\"",
         "(str (interp (+ a b) \".3\") \" and \" (interp (call f x)))")]
@@ -248,9 +248,9 @@ public class ExpressionErrorTests
     [InlineData("∫[] |x| x")]         // no ranges
     [InlineData("∂(f)")]              // missing wrt
     [InlineData("grad(f, x")]         // missing paren
-    [InlineData("guess(ridge = 1) (X, y)")] // missing 'fit'
-    [InlineData("guess(ridge = 1) fit (X)")] // missing target
-    [InlineData("judge fit (X, y)")]  // missing config
+    [InlineData("regress(ridge = 1) (X, y)")] // missing 'fit'
+    [InlineData("regress(ridge = 1) fit (X)")] // missing target
+    [InlineData("classify fit (X, y)")]  // missing config
     [InlineData("1..2..3")]           // ranges do not chain
     public void MalformedFormsReportAnError(string text)
     {
@@ -294,8 +294,8 @@ public class Phase4RoundTripTests
     [InlineData("x := ∫[0..1, 0..2, tol = 1e-6] |x, y| x * y")]
     [InlineData("x := (∫[0..1] |t| t) + 1")]
     [InlineData("x := ∂(|t| t ** 3, w)[0]")]
-    [InlineData("x := guess(ridge = 0.05) fit (X[:, 0..3], y)")]
-    [InlineData("x := judge(svm(kernel = \"rbf\")) fit (X, y)(&Z)")]
+    [InlineData("x := regress(ridge = 0.05) fit (X[:, 0..3], y)")]
+    [InlineData("x := classify(svm(kernel = \"rbf\")) fit (X, y)(&Z)")]
     [InlineData("x := \"{a + ||v||:.3} {sum[i in 0..3] i}\"")]
     [InlineData("x := (a..b)(1)")]
     public void FormatsAndReparsesToTheSameTree(string text) => AssertRoundTrips(text);

@@ -20,10 +20,10 @@
   Fix: Replace 'x' with a lambda like '|x| expr' after the integration ranges.
 
 [SE00002] 🤨 WAIT WHAT [Line 4]: Found '(' where I wanted 'fit' and the training data, as in 'fit (X, y)'. Were you typing with oven mitts?
-  --> bad_exprs.splat:4:23
+  --> bad_exprs.splat:4:25
    |
- 4 | d := guess(ridge = 1) (X, y)
-   |                       ^
+ 4 | d := regress(ridge = 1) (X, y)
+   |                         ^
   Fix: Replace '(' with 'fit' and the training data, as in 'fit (X, y)'.
 
 [SE00002] 🤨 WAIT WHAT [Line 5]: Found ')' where I wanted ',' and the variable to differentiate by. The parser is concerned.

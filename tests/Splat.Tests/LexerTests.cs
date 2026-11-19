@@ -83,7 +83,7 @@ public class LexerLiteralTests
     [Fact]
     public void Booleans()
     {
-        Assert.Equal([TokenKind.Yep, TokenKind.Nop], LexHelper.Kinds("yep nop"));
+        Assert.Equal([TokenKind.True, TokenKind.False], LexHelper.Kinds("true false"));
     }
 
     [Fact]
@@ -150,19 +150,19 @@ public class LexerLiteralTests
 public class LexerKeywordAndOperatorTests
 {
     [Theory]
-    [InlineData("wag", TokenKind.Wag)] [InlineData("cook", TokenKind.Cook)] [InlineData("yeet", TokenKind.Yeet)]
-    [InlineData("hmm", TokenKind.Hmm)] [InlineData("meh", TokenKind.Meh)] [InlineData("nah", TokenKind.Nah)]
-    [InlineData("spin", TokenKind.Spin)] [InlineData("bail", TokenKind.Bail)] [InlineData("skip", TokenKind.Skip)]
-    [InlineData("pick", TokenKind.Pick)] [InlineData("mold", TokenKind.Mold)] [InlineData("from", TokenKind.From)]
-    [InlineData("with", TokenKind.With)] [InlineData("quirk", TokenKind.Quirk)] [InlineData("teach", TokenKind.Teach)]
-    [InlineData("me", TokenKind.Me)] [InlineData("elder", TokenKind.Elder)] [InlineData("birth", TokenKind.Birth)]
-    [InlineData("funeral", TokenKind.Funeral)] [InlineData("secret", TokenKind.Secret)] [InlineData("mood", TokenKind.Mood)]
-    [InlineData("yolo", TokenKind.Yolo)] [InlineData("oops", TokenKind.Oops)] [InlineData("rip", TokenKind.Rip)]
-    [InlineData("zone", TokenKind.Zone)] [InlineData("nuke", TokenKind.Nuke)] [InlineData("yoink", TokenKind.Yoink)]
-    [InlineData("guess", TokenKind.Guess)] [InlineData("judge", TokenKind.Judge)] [InlineData("brain", TokenKind.Brain)]
-    [InlineData("grind", TokenKind.Grind)] [InlineData("fit", TokenKind.Fit)] [InlineData("on", TokenKind.On)]
+    [InlineData("var", TokenKind.Var)] [InlineData("fn", TokenKind.Fn)] [InlineData("ret", TokenKind.Return)]
+    [InlineData("if", TokenKind.If)] [InlineData("elif", TokenKind.Elif)] [InlineData("el", TokenKind.Else)]
+    [InlineData("loop", TokenKind.Loop)] [InlineData("br", TokenKind.Break)] [InlineData("cont", TokenKind.Continue)]
+    [InlineData("pick", TokenKind.Pick)] [InlineData("class", TokenKind.Class)] [InlineData("from", TokenKind.From)]
+    [InlineData("with", TokenKind.With)] [InlineData("trait", TokenKind.Trait)] [InlineData("extend", TokenKind.Extend)]
+    [InlineData("self", TokenKind.Self)] [InlineData("super", TokenKind.Super)] [InlineData("init", TokenKind.Init)]
+    [InlineData("deinit", TokenKind.Deinit)] [InlineData("secret", TokenKind.Secret)] [InlineData("enum", TokenKind.Enum)]
+    [InlineData("try", TokenKind.Try)] [InlineData("catch", TokenKind.Catch)] [InlineData("rip", TokenKind.Rip)]
+    [InlineData("arena", TokenKind.Arena)] [InlineData("drop", TokenKind.Drop)] [InlineData("imp", TokenKind.Import)]
+    [InlineData("regress", TokenKind.Regress)] [InlineData("classify", TokenKind.Classify)] [InlineData("network", TokenKind.Network)]
+    [InlineData("train", TokenKind.Train)] [InlineData("fit", TokenKind.Fit)] [InlineData("on", TokenKind.On)]
     [InlineData("in", TokenKind.In)] [InlineData("while", TokenKind.While)] [InlineData("and", TokenKind.And)]
-    [InlineData("or", TokenKind.Or)] [InlineData("yep", TokenKind.Yep)] [InlineData("nop", TokenKind.Nop)]
+    [InlineData("or", TokenKind.Or)] [InlineData("true", TokenKind.True)] [InlineData("false", TokenKind.False)]
     [InlineData("grad", TokenKind.Grad)] [InlineData("intg", TokenKind.Intg)] [InlineData("sum", TokenKind.Sum)]
     [InlineData("prod", TokenKind.Prod)]
     public void Keywords(string text, TokenKind kind) => Assert.Equal(kind, LexHelper.Single(text).Kind);
@@ -176,10 +176,10 @@ public class LexerKeywordAndOperatorTests
     [Fact]
     public void KeywordsAreCaseSensitive_AndPrefixesAreIdentifiers()
     {
-        Assert.Equal(TokenKind.Ident, LexHelper.Single("Wag").Kind);
+        Assert.Equal(TokenKind.Ident, LexHelper.Single("Var").Kind);
         Assert.Equal(TokenKind.Ident, LexHelper.Single("waggle").Kind);
-        Assert.Equal(TokenKind.Ident, LexHelper.Single("mid").Kind);
-        Assert.Equal(TokenKind.Ident, LexHelper.Single("squish").Kind);
+        Assert.Equal(TokenKind.Ident, LexHelper.Single("f32").Kind);
+        Assert.Equal(TokenKind.Ident, LexHelper.Single("print").Kind);
     }
 
     [Theory]
@@ -237,11 +237,11 @@ public class LexerColonAndBracketTests
     [Fact]
     public void BlockColon_TypeColon_BindColon()
     {
-        Assert.Equal([TokenKind.Hmm, TokenKind.Ident, TokenKind.Colon], LexHelper.Kinds("hmm x:"));
-        Assert.Equal([TokenKind.Ident, TokenKind.DoubleColon, TokenKind.Ident], LexHelper.Kinds("x::mid"));
+        Assert.Equal([TokenKind.If, TokenKind.Ident, TokenKind.Colon], LexHelper.Kinds("if x:"));
+        Assert.Equal([TokenKind.Ident, TokenKind.DoubleColon, TokenKind.Ident], LexHelper.Kinds("x::f32"));
         Assert.Equal([TokenKind.Ident, TokenKind.ColonAssign, TokenKind.Int], LexHelper.Kinds("x:=1"));
         Assert.Equal([TokenKind.Ident, TokenKind.DoubleColon, TokenKind.Ident, TokenKind.Assign, TokenKind.Float],
-            LexHelper.Kinds("x::mid = 1.0"));
+            LexHelper.Kinds("x::f32 = 1.0"));
     }
 
     [Fact]
@@ -259,7 +259,7 @@ public class LexerColonAndBracketTests
     [Fact]
     public void ColonAfterClosingBracket_IsBlockOpen()
     {
-        var kinds = LexHelper.Kinds("hmm A[0] == 1:");
+        var kinds = LexHelper.Kinds("if A[0] == 1:");
         Assert.Equal(TokenKind.Colon, kinds[^1]);
         Assert.DoesNotContain(TokenKind.SliceColon, kinds);
     }
@@ -286,7 +286,7 @@ public class LexerColonAndBracketTests
         Assert.Equal(
             [TokenKind.Ident, TokenKind.LBracket, TokenKind.Dollar, TokenKind.Ident, TokenKind.Comma, TokenKind.Question,
              TokenKind.Comma, TokenKind.Int, TokenKind.RBracket],
-            LexHelper.Kinds("mid[$B, ?, 128]"));
+            LexHelper.Kinds("f32[$B, ?, 128]"));
     }
 
     [Fact]
@@ -320,7 +320,7 @@ public class LexerTransposeAndPipeTests
         Assert.Equal(
             [TokenKind.Ident, TokenKind.LBracket, TokenKind.Int, TokenKind.RBracket, TokenKind.Transpose],
             LexHelper.Kinds("A[0]'"));
-        Assert.Equal([TokenKind.Me, TokenKind.Transpose], LexHelper.Kinds("me'"));
+        Assert.Equal([TokenKind.Self, TokenKind.Transpose], LexHelper.Kinds("self'"));
     }
 
     [Fact]
@@ -520,7 +520,7 @@ public class LexerStringTests
     [Fact]
     public void Unterminated_ReportsAtOpeningQuote_AndStillEmitsToken()
     {
-        var (tokens, diag, _) = LexHelper.Lex("x := \"oops\ny := 2");
+        var (tokens, diag, _) = LexHelper.Lex("x := \"catch\ny := 2");
         var d = Assert.Single(diag.Diagnostics);
         Assert.Equal(DiagnosticCategory.UnterminatedString, d.Category);
         Assert.Equal(1, d.Span.Line);
@@ -708,11 +708,11 @@ public class LexerGoldenFileTests
     {
         var (tokens, _, _) = LexHelper.Lex(File.ReadAllText(Golden("fizzbuzz.splat")));
         var kinds = tokens.Select(t => t.Kind).ToList();
-        Assert.Equal(1, kinds.Count(k => k == TokenKind.Cook));
-        Assert.Equal(1, kinds.Count(k => k == TokenKind.Spin));
-        Assert.Equal(1, kinds.Count(k => k == TokenKind.Hmm));
-        Assert.Equal(2, kinds.Count(k => k == TokenKind.Meh));
-        Assert.Equal(1, kinds.Count(k => k == TokenKind.Nah));
+        Assert.Equal(1, kinds.Count(k => k == TokenKind.Fn));
+        Assert.Equal(1, kinds.Count(k => k == TokenKind.Loop));
+        Assert.Equal(1, kinds.Count(k => k == TokenKind.If));
+        Assert.Equal(2, kinds.Count(k => k == TokenKind.Elif));
+        Assert.Equal(1, kinds.Count(k => k == TokenKind.Else));
         Assert.Equal(TokenKind.DotDotEq, kinds.Single(k => k == TokenKind.DotDotEq));
     }
 

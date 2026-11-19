@@ -1,0 +1,31 @@
+# A pick that forgets a case is a compile error, so nothing runs. The message names what is missing.
+enum Light:
+    Red,
+    Yellow,
+    Green
+;
+
+fn action(l::Light)::txt:
+    pick l:
+        Red => "stop",
+        Green => "go"
+    ;
+;
+
+# Nested patterns are checked too: Got(Nada) is not covered here.
+fn describe(m::Maybe<Maybe<i32>>)::txt:
+    pick m:
+        Got(Got(v)) => "inner {v}",
+        Nada => "none"
+    ;
+;
+
+# Integers need a catch-all unless the ranges cover the whole type.
+fn size(n::i32)::txt:
+    pick n:
+        0..=9 => "small",
+        10..=99 => "medium"
+    ;
+;
+
+print action(Red)

@@ -1,7 +1,7 @@
 a := ||x
 b := ∑[i 0..3] i
 c := ∫[0..1] x
-d := guess(ridge = 1) (X, y)
+d := regress(ridge = 1) (X, y)
 e := ∂(f)
 f := ||x||_zz
 g := |x

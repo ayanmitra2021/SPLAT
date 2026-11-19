@@ -1,4 +1,4 @@
-(bind A (: (tensor mid 3 4)) (call zeros 3 4))
+(bind A (: (tensor f32 3 4)) (call zeros 3 4))
 (bind B (' A))
 (bind C (@ A B))
 (bind w (** (norm F C) 2))
@@ -7,5 +7,5 @@
 (bind col (index A : (.. 0 3)))
 (bind y (\ A b))
 (bind dot (· u v))
-(bind loss (and (+ (norm 2 (- u v)) (norm 1 u)) nop))
+(bind loss (and (+ (norm 2 (- u v)) (norm 1 u)) false))
 (bind s (+ (+ (+ (+ 1000 255) 10) 3.14) 0.0001))

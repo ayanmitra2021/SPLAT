@@ -1,0 +1,22 @@
+# Type and mutability errors for the Phase 7 types: all reported at check time, so nothing runs.
+xs := [1, 2, 3]
+xs.push(4)
+
+var ys = [1, 2]
+ys.push("three")
+
+s := set(1.5, 2.5)
+var e = []
+x::Maybe = Nada
+y::Maybe<i32, txt> = Nada
+z::Maybe<i32> = Got("text")
+
+enum Light:
+    Red,
+    Green
+;
+pick Red:
+    Blue => 1,
+    Red => 2,
+    Green => 3
+;

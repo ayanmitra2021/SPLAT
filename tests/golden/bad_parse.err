@@ -1,7 +1,0 @@
-[SE00305] ☠️ RIP [Line 3]: Cannot read "twelve" as a i32. Not a whole number, or too big for the type.
-  --> bad_parse.splat:3:8
-   |
- 3 | squish parse_i32("twelve")
-   |        ^^^^^^^^^^^^^^^^^^^
-  Fix: 'rip' is unrecoverable by design; fix the condition that led here.
-

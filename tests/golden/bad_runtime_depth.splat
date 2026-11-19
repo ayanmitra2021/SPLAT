@@ -1,2 +1,2 @@
-cook forever(n::i32)::i32 = forever(n + 1) + 1
-squish forever(0)
+fn forever(n::i32)::i32 = forever(n + 1) + 1
+print forever(0)

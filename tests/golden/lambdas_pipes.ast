@@ -8,4 +8,4 @@
 (bind n (lambda (params x) (norm 2 x)))
 (bind both (or (norm 2 a) (norm 2 b)))
 (bind cmp (lambda (params a) (and (< a 3) (> a 0))))
-(bind net (>> (>> (>> (call lin In 64) gelu) (call drop 0.1)) (call lin 64 Out)))
+(bind net (>> (>> (>> (call lin In 64) gelu) (call dropout 0.1)) (call lin 64 Out)))

@@ -1,23 +1,23 @@
 # `then` chains disjoint iterables. Every part must produce the same element type.
-wag out = ""
-spin x in 0..3 then 50..53:
+var out = ""
+loop x in 0..3 then 50..53:
     out = out + "{x} "
 ;
-squish out
+print out
 
 out = ""
-spin c in "abc" then "xyz":
+loop c in "abc" then "xyz":
     out = out + "{c}-"
 ;
-squish out
+print out
 
 out = ""
-spin x in 0..=10 by 5 then rev(100..103) then 7..8:
+loop x in 0..=10 by 5 then rev(100..103) then 7..8:
     out = out + "{x} "
 ;
-squish out
+print out
 
-squish 51 in 0..3 then 50..53, 7 in 0..3 then 50..53, c"y" in "abc" then "xyz"
+print 51 in 0..3 then 50..53, 7 in 0..3 then 50..53, c"y" in "abc" then "xyz"
 by := 2
 then := 3
-squish "by and then still work as names: {by + then}"
+print "by and then still work as names: {by + then}"

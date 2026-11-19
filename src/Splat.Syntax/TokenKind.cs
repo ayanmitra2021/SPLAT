@@ -8,11 +8,11 @@ public enum TokenKind
     Ident, Int, Float, String, Char,
 
     // Keywords (spec 2.3). `Grad`/`Intg`/`Sum`/`Prod` cover both the ASCII spelling and the Unicode symbol.
-    Wag, Cook, Yeet, Hmm, Meh, Nah, Spin, Bail, Skip, Pick,
-    Mold, From, With, Quirk, Teach, Me, Elder, Birth, Funeral, Secret, Mood,
-    Yolo, Oops, Rip, Zone, Nuke, Yoink,
-    Guess, Judge, Brain, Grind,
-    Fit, On, In, While, And, Or, Yep, Nop,
+    Var, Fn, Return, If, Elif, Else, Loop, Break, Continue, Pick,
+    Class, From, With, Trait, Extend, Self, Super, Init, Deinit, Secret, Enum,
+    Try, Catch, Rip, Arena, Drop, Import,
+    Regress, Classify, Network, Train,
+    Fit, On, In, While, And, Or, True, False,
     Grad, Intg, Sum, Prod,
 
     // Clause punctuation

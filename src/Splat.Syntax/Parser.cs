@@ -11,8 +11,8 @@ public sealed partial class Parser
 {
     private const int MaxDepth = 200;
 
-    /// <summary>Names that may be called without parentheses as a statement: <c>squish "hi {name}"</c>.</summary>
-    private static readonly HashSet<string> CommandNames = new(StringComparer.Ordinal) { "squish", "yell", "slurp" };
+    /// <summary>Names that may be called without parentheses as a statement: <c>print "hi {name}"</c>.</summary>
+    private static readonly HashSet<string> CommandNames = new(StringComparer.Ordinal) { "print", "eprint", "readl" };
 
     private readonly SourceText _src;
     private readonly DiagnosticEngine _diag;
@@ -20,6 +20,7 @@ public sealed partial class Parser
     private int _p;
     private int _depth;
     private int _lastErrorOffset = -1;
+    private int _syntheticLoopVars;
 
     /// <summary>Internal panic-mode signal; always caught inside the parser.</summary>
     private sealed class ParseAbort : Exception;
@@ -132,9 +133,9 @@ public sealed partial class Parser
     }
 
     private static bool IsStatementStart(TokenKind k) => k is
-        TokenKind.Wag or TokenKind.Cook or TokenKind.Yeet or TokenKind.Hmm or TokenKind.Spin or TokenKind.Bail
-        or TokenKind.Skip or TokenKind.Pick or TokenKind.Mold or TokenKind.Quirk or TokenKind.Teach or TokenKind.Mood
-        or TokenKind.Yolo or TokenKind.Zone or TokenKind.Nuke or TokenKind.Yoink or TokenKind.Brain or TokenKind.Grind
+        TokenKind.Var or TokenKind.Fn or TokenKind.Return or TokenKind.If or TokenKind.Loop or TokenKind.Break
+        or TokenKind.Continue or TokenKind.Pick or TokenKind.Class or TokenKind.Trait or TokenKind.Extend or TokenKind.Enum
+        or TokenKind.Try or TokenKind.Arena or TokenKind.Drop or TokenKind.Import or TokenKind.Network or TokenKind.Train
         or TokenKind.Rip;
 
     private Stmt ParseStatementSafe()
@@ -157,14 +158,14 @@ public sealed partial class Parser
 
     /// <summary>
     /// Panic-mode recovery: skip to a token that can start a statement or that belongs to the enclosing block
-    /// (<c>;</c>, <c>meh</c>, <c>nah</c>, end of file). An identifier that starts a new line also counts.
+    /// (<c>;</c>, <c>elif</c>, <c>el</c>, end of file). An identifier that starts a new line also counts.
     /// </summary>
     private void Synchronize()
     {
         while (!AtEnd)
         {
             var k = Cur.Kind;
-            if (k is TokenKind.Semicolon or TokenKind.Meh or TokenKind.Nah or TokenKind.Oops) return;
+            if (k is TokenKind.Semicolon or TokenKind.Elif or TokenKind.Else or TokenKind.Catch) return;
             if (IsStatementStart(k)) return;
             if (k == TokenKind.Ident && Cur.NewlineBefore && Prev.Kind != TokenKind.Comma) return;
             Advance();
@@ -179,19 +180,23 @@ public sealed partial class Parser
             var t = Cur;
             switch (t.Kind)
             {
-                case TokenKind.Wag: return ParseWag();
-                case TokenKind.Cook: return ParseCook();
-                case TokenKind.Yeet: return ParseYeet();
+                case TokenKind.Var: return ParseVar();
+                case TokenKind.Fn: return ParseFn();
+                case TokenKind.Return: return ParseReturn();
                 case TokenKind.Rip: return ParseRip();
-                case TokenKind.Hmm: return ParseHmm();
-                case TokenKind.Spin: return ParseSpin();
-                case TokenKind.Bail: Advance(); return new BailStmt(t.Span);
-                case TokenKind.Skip: Advance(); return new SkipStmt(t.Span);
-                case TokenKind.Meh or TokenKind.Nah:
+                case TokenKind.If: return ParseIf();
+                case TokenKind.Loop: return ParseLoop();
+                case TokenKind.Break: Advance(); return new BreakStmt(t.Span);
+                case TokenKind.Continue: Advance(); return new ContinueStmt(t.Span);
+                case TokenKind.Elif or TokenKind.Else:
                     return ParseOrphanBranch();
-                case TokenKind.Pick or TokenKind.Mold or TokenKind.Quirk or TokenKind.Teach or TokenKind.Mood
-                    or TokenKind.Yolo or TokenKind.Zone or TokenKind.Nuke or TokenKind.Yoink or TokenKind.Brain
-                    or TokenKind.Grind:
+                case TokenKind.Enum:
+                    return ParseEnum();
+                case TokenKind.Pick:
+                    return ParseExpressionStatement(); // pick is a prefix expression
+                case TokenKind.Class or TokenKind.Trait or TokenKind.Extend
+                    or TokenKind.Try or TokenKind.Arena or TokenKind.Drop or TokenKind.Import or TokenKind.Network
+                    or TokenKind.Train:
                     return ParseReserved();
                 case TokenKind.Ident:
                     if (PeekTok().Kind == TokenKind.ColonAssign || PeekTok().Kind == TokenKind.DoubleColon)
@@ -221,13 +226,13 @@ public sealed partial class Parser
         return new BindStmt(name.Text, name.Span, type, v, false, SpanFrom(name));
     }
 
-    private Stmt ParseWag()
+    private Stmt ParseVar()
     {
         var kw = Advance();
-        var name = Expect(TokenKind.Ident, "a variable name after 'wag'");
+        var name = Expect(TokenKind.Ident, "a variable name after 'var'");
         TypeRef? type = null;
         if (Match(TokenKind.DoubleColon)) type = ParseType();
-        if (At(TokenKind.ColonAssign)) throw Fail(Cur, "'=' ('wag' variables use '=', not ':=')");
+        if (At(TokenKind.ColonAssign)) throw Fail(Cur, "'=' ('var' variables use '=', not ':=')");
         Expect(TokenKind.Assign, "'=' and a value");
         var value = ParseExpr();
         return new BindStmt(name.Text, name.Span, type, value, true, SpanFrom(kw));
@@ -241,7 +246,7 @@ public sealed partial class Parser
     {
         var start = Cur;
 
-        // Statement-form call without parentheses: `squish "Got {val}", x`.
+        // Statement-form call without parentheses: `print "Got {val}", x`.
         if (start.Kind == TokenKind.Ident && CommandNames.Contains(start.Text) && StartsCommandArgument(PeekTok()))
         {
             Advance();
@@ -257,6 +262,21 @@ public sealed partial class Parser
         }
 
         var expr = ParseExpr();
+
+        // Tuple destructuring: (a, b) := expr
+        if (expr is TupleExpr te && At(TokenKind.ColonAssign))
+        {
+            Advance();
+            var names = new List<string>();
+            foreach (var item in te.Items)
+            {
+                if (item is NameExpr ne) names.Add(ne.Name);
+                else { _diag.Report(Templates.UnexpectedToken(item.Span, item.GetType().Name, "a variable name in a tuple destructure")); names.Add("_"); }
+            }
+            var value = ParseExpr();
+            return new TupleBindStmt(names, value, false, SpanFrom(start));
+        }
+
         if (IsAssignOp(Cur.Kind))
         {
             if (expr is not (NameExpr or IndexExpr or MemberExpr))
@@ -278,19 +298,19 @@ public sealed partial class Parser
     /// </summary>
     private static bool StartsCommandArgument(Token t) =>
         !t.NewlineBefore && t.SpaceBefore && t.Kind is
-            TokenKind.String or TokenKind.Int or TokenKind.Float or TokenKind.Char or TokenKind.Ident or TokenKind.Yep
-            or TokenKind.Nop or TokenKind.Me or TokenKind.Elder or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde;
+            TokenKind.String or TokenKind.Int or TokenKind.Float or TokenKind.Char or TokenKind.Ident or TokenKind.True
+            or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde;
 
-    // ---- yeet / rip ----
+    // ---- ret / rip ----
 
     /// <summary>An optional trailing expression must start on the same line as its keyword.</summary>
     private bool ValueFollowsOnSameLine() => !Cur.NewlineBefore && CanStartExpr(Cur);
 
-    private Stmt ParseYeet()
+    private Stmt ParseReturn()
     {
         var kw = Advance();
         Expr? value = ValueFollowsOnSameLine() ? ParseExpr() : null;
-        return new YeetStmt(value, SpanFrom(kw));
+        return new ReturnStmt(value, SpanFrom(kw));
     }
 
     private Stmt ParseRip()
@@ -310,13 +330,13 @@ public sealed partial class Parser
         return Prev;
     }
 
-    /// <summary>Statements up to (not including) ';', end of file, and optionally 'meh'/'nah'.</summary>
+    /// <summary>Statements up to (not including) ';', end of file, and optionally 'elif'/'el'.</summary>
     private List<Stmt> ParseStatements(bool stopAtBranch)
     {
         var stmts = new List<Stmt>();
         while (!AtEnd && !At(TokenKind.Semicolon))
         {
-            if (stopAtBranch && Cur.Kind is TokenKind.Meh or TokenKind.Nah) break;
+            if (stopAtBranch && Cur.Kind is TokenKind.Elif or TokenKind.Else) break;
             stmts.Add(ParseStatementSafe());
         }
         return stmts;
@@ -346,43 +366,43 @@ public sealed partial class Parser
         finally { Leave(); }
     }
 
-    // ---- hmm / meh / nah ----
+    // ---- if / elif / el ----
 
-    private Stmt ParseHmm()
+    private Stmt ParseIf()
     {
         var kw = Advance();
-        var branches = new List<HmmBranch>();
+        var branches = new List<IfBranch>();
         Block? elseBlock = null;
         Token lastOpener;
 
-        var (cond, opener) = ParseHeaderThenOpen("hmm", "condition");
+        var (cond, opener) = ParseHeaderThenOpen("if", "condition");
         lastOpener = opener;
         var body = MakeBlock(opener, ParseStatements(stopAtBranch: true));
-        branches.Add(new HmmBranch(cond, body, _src.Join(kw.Span, body.Span)));
+        branches.Add(new IfBranch(cond, body, _src.Join(kw.Span, body.Span)));
 
-        while (Cur.Kind is TokenKind.Meh or TokenKind.Nah)
+        while (Cur.Kind is TokenKind.Elif or TokenKind.Else)
         {
             var bk = Advance();
-            if (bk.Kind == TokenKind.Meh)
+            if (bk.Kind == TokenKind.Elif)
             {
-                var (c, o) = ParseHeaderThenOpen("meh", "condition");
+                var (c, o) = ParseHeaderThenOpen("elif", "condition");
                 lastOpener = o;
                 var b = MakeBlock(o, ParseStatements(stopAtBranch: true));
-                if (elseBlock is not null) _diag.Report(Templates.OrphanBranch(bk.Span, "meh"));
-                else branches.Add(new HmmBranch(c, b, _src.Join(bk.Span, b.Span)));
+                if (elseBlock is not null) _diag.Report(Templates.OrphanBranch(bk.Span, "elif"));
+                else branches.Add(new IfBranch(c, b, _src.Join(bk.Span, b.Span)));
             }
             else
             {
-                var o = ExpectBlockOpen("'nah' block");
+                var o = ExpectBlockOpen("'el' block");
                 lastOpener = o;
                 var b = MakeBlock(o, ParseStatements(stopAtBranch: true));
-                if (elseBlock is not null) _diag.Report(Templates.OrphanBranch(bk.Span, "nah"));
+                if (elseBlock is not null) _diag.Report(Templates.OrphanBranch(bk.Span, "el"));
                 else elseBlock = b;
             }
         }
 
         CloseBlock(lastOpener);
-        return new HmmStmt(branches, elseBlock, SpanFrom(kw));
+        return new IfStmt(branches, elseBlock, SpanFrom(kw));
     }
 
     /// <summary>
@@ -411,46 +431,88 @@ public sealed partial class Parser
             Advance();
     }
 
-    /// <summary>A 'meh'/'nah' with no 'hmm': report it, then swallow its header, body and closing ';' so no cascade follows.</summary>
+    /// <summary>An 'elif'/'el' with no 'if': report it, then swallow its header, body and closing ';' so no cascade follows.</summary>
     private Stmt ParseOrphanBranch()
     {
         var kw = Advance();
         _diag.Report(Templates.OrphanBranch(kw.Span, kw.Text));
-        if (kw.Kind == TokenKind.Meh) SkipToBlockOpen();
+        if (kw.Kind == TokenKind.Elif) SkipToBlockOpen();
         if (Match(TokenKind.Colon))
         {
             ParseStatements(stopAtBranch: true);
-            if (!At(TokenKind.Meh) && !At(TokenKind.Nah)) Match(TokenKind.Semicolon);
+            if (!At(TokenKind.Elif) && !At(TokenKind.Else)) Match(TokenKind.Semicolon);
         }
         return new ErrorStmt(SpanFrom(kw));
     }
 
-    // ---- spin ----
+    // ---- loop ----
 
-    private Stmt ParseSpin()
+    private Stmt ParseLoop()
     {
         var kw = Advance();
         if (At(TokenKind.Colon))
         {
-            var body = ParseBlock("'spin' block");
-            return new SpinStmt(SpinKind.Forever, null, null, body, SpanFrom(kw));
+            var body = ParseBlock("'loop' block");
+            return new LoopStmt(LoopKind.Forever, null, null, body, SpanFrom(kw));
         }
         if (Match(TokenKind.While))
         {
-            var (cond, opener) = ParseHeaderThenOpen("spin while", "condition");
-            return FinishSpin(kw, SpinKind.While, null, cond, opener);
+            var (cond, opener) = ParseHeaderThenOpen("loop while", "condition");
+            return FinishLoop(kw, LoopKind.While, null, cond, opener);
         }
-        if (At(TokenKind.Ident) && PeekTok().Kind == TokenKind.In)
+        if (At(TokenKind.LParen))
+        {
+            // `loop (k, v) in m:` is the same as `loop k, v in m:`.
+            var open = Advance();
+            var vars = new List<string>();
+            do vars.Add(Expect(TokenKind.Ident, "a loop variable name").Text); while (Match(TokenKind.Comma));
+            Expect(TokenKind.RParen, "')' to close the loop variables");
+            Expect(TokenKind.In, "'in' after the loop variables");
+            var (subject, opener) = ParseHeaderThenOpen("loop", "collection");
+            return vars.Count == 1
+                ? FinishLoop(kw, LoopKind.In, vars[0], subject, opener)
+                : FinishMultiVarLoop(kw, vars, subject, opener, open);
+        }
+        if (At(TokenKind.Ident) && (PeekTok().Kind == TokenKind.In || PeekTok().Kind == TokenKind.Comma))
         {
             var v = Advance();
-            Advance();
-            var (subject, opener) = ParseHeaderThenOpen("spin", "range");
-            return FinishSpin(kw, SpinKind.In, v.Text, subject, opener);
+            // Multi-variable: loop k, v in map — desugar to loop __mv in map: (k, v) := __mv; body ;
+            if (At(TokenKind.Comma))
+            {
+                var names = new List<string> { v.Text };
+                while (Match(TokenKind.Comma))
+                    names.Add(Expect(TokenKind.Ident, "a variable name after ','").Text);
+                Expect(TokenKind.In, "'in' after the variable list");
+                var (subject, opener) = ParseHeaderThenOpen("loop", "range");
+                return FinishMultiVarLoop(kw, names, subject, opener, v);
+            }
+            Advance(); // 'in'
+            var (subj2, opener2) = ParseHeaderThenOpen("loop", "range");
+            return FinishLoop(kw, LoopKind.In, v.Text, subj2, opener2);
         }
-        throw Fail(Cur, "'i in range', 'while condition' or ':' after 'spin'");
+        throw Fail(Cur, "'i in range', 'while condition' or ':' after 'loop'");
     }
 
-    private SpinStmt FinishSpin(Token kw, SpinKind kind, string? variable, Expr subject, Token opener)
+    private LoopStmt FinishMultiVarLoop(Token kw, List<string> names, Expr subject, Token opener, Token firstVar)
+    {
+        // Desugar loop k, v in m: body ; into loop __mv in m: (k, v) := __mv; body ;
+        Enter();
+        try
+        {
+            var syntheticName = $"__mv_{_syntheticLoopVars++}";
+            var stmts = ParseStatements(stopAtBranch: false);
+            var nameRef = new NameExpr(syntheticName, opener.Span);
+            var destructure = new TupleBindStmt(names, nameRef, false, opener.Span);
+            var allStmts = new List<Stmt> { destructure };
+            allStmts.AddRange(stmts);
+            var block = MakeBlock(opener, allStmts);
+            CloseBlock(opener);
+            return new LoopStmt(LoopKind.In, syntheticName, subject, block, SpanFrom(kw));
+        }
+        finally { Leave(); }
+    }
+
+    private LoopStmt FinishLoop(Token kw, LoopKind kind, string? variable, Expr subject, Token opener)
     {
         Enter();
         try
@@ -458,12 +520,12 @@ public sealed partial class Parser
             var stmts = ParseStatements(stopAtBranch: false);
             var block = MakeBlock(opener, stmts);
             CloseBlock(opener);
-            return new SpinStmt(kind, variable, subject, block, SpanFrom(kw));
+            return new LoopStmt(kind, variable, subject, block, SpanFrom(kw));
         }
         finally { Leave(); }
     }
 
-    // ---- cook ----
+    // ---- fn ----
 
     private static readonly Dictionary<TokenKind, string> OverloadSymbols = new()
     {
@@ -472,7 +534,7 @@ public sealed partial class Parser
         [TokenKind.BangEq] = "!=", [TokenKind.Lt] = "<", [TokenKind.Le] = "<=", [TokenKind.Gt] = ">", [TokenKind.Ge] = ">=",
     };
 
-    private Stmt ParseCook()
+    private Stmt ParseFn()
     {
         var kw = Advance();
         string name;
@@ -492,14 +554,14 @@ public sealed partial class Parser
                 Advance();
                 opSymbol = sym;
             }
-            else throw Fail(Cur, "an operator symbol after 'cook op'");
+            else throw Fail(Cur, "an operator symbol after 'fn op'");
             name = "op " + opSymbol;
         }
-        else if (Cur.Kind is TokenKind.Ident or TokenKind.Birth or TokenKind.Funeral)
+        else if (Cur.Kind is TokenKind.Ident or TokenKind.Init or TokenKind.Deinit)
         {
             name = Advance().Text;
         }
-        else throw Fail(Cur, "a function name after 'cook'");
+        else throw Fail(Cur, "a function name after 'fn'");
 
         var generics = At(TokenKind.Lt) ? ParseGenericParams() : [];
 
@@ -517,12 +579,12 @@ public sealed partial class Parser
         if (Match(TokenKind.Assign))
         {
             var body = ParseExpr();
-            return new CookDecl(name, opSymbol, generics, parms, ret, body, null, SpanFrom(kw));
+            return new FnDecl(name, opSymbol, generics, parms, ret, body, null, SpanFrom(kw));
         }
         if (At(TokenKind.Colon))
         {
             var block = ParseBlock($"body of '{name}'");
-            return new CookDecl(name, opSymbol, generics, parms, ret, null, block, SpanFrom(kw));
+            return new FnDecl(name, opSymbol, generics, parms, ret, null, block, SpanFrom(kw));
         }
         throw Fail(Cur, $"'=' or ':' to start the body of '{name}'");
     }
@@ -533,10 +595,10 @@ public sealed partial class Parser
         if (At(TokenKind.Amp) || At(TokenKind.Tilde))
         {
             bool poke = Advance().Kind == TokenKind.Tilde;
-            Expect(TokenKind.Me, "'me' after '&' or '~' in a parameter list");
-            return new Param(poke ? ParamKind.PokeMe : ParamKind.PeekMe, "me", null, null, SpanFrom(start));
+            Expect(TokenKind.Self, "'self' after '&' or '~' in a parameter list");
+            return new Param(poke ? ParamKind.PokeSelf : ParamKind.PeekSelf, "self", null, null, SpanFrom(start));
         }
-        if (Match(TokenKind.Me)) return new Param(ParamKind.Me, "me", null, null, SpanFrom(start));
+        if (Match(TokenKind.Self)) return new Param(ParamKind.Self, "self", null, null, SpanFrom(start));
 
         var name = Expect(TokenKind.Ident, "a parameter name");
         Expect(TokenKind.DoubleColon, $"'::Type' after parameter '{name.Text}'");
@@ -560,7 +622,7 @@ public sealed partial class Parser
             else
             {
                 var n = Expect(TokenKind.Ident, "a generic parameter name");
-                string? bound = Match(TokenKind.Colon) ? Expect(TokenKind.Ident, "a quirk name after ':'").Text : null;
+                string? bound = Match(TokenKind.Colon) ? Expect(TokenKind.Ident, "a trait name after ':'").Text : null;
                 list.Add(new GenericParam(n.Text, false, bound, SpanFrom(start)));
             }
         } while (Match(TokenKind.Comma));
@@ -582,9 +644,9 @@ public sealed partial class Parser
                 var inner = ParseType();
                 return new RefType(poke, inner, SpanFrom(start));
             }
-            if (Match(TokenKind.Cook))
+            if (Match(TokenKind.Fn))
             {
-                Expect(TokenKind.LParen, "'(' after 'cook' in a function type");
+                Expect(TokenKind.LParen, "'(' after 'fn' in a function type");
                 var ps = new List<TypeRef>();
                 while (!At(TokenKind.RParen))
                 {
@@ -594,6 +656,21 @@ public sealed partial class Parser
                 Expect(TokenKind.RParen, "')'");
                 TypeRef? r = Match(TokenKind.DoubleColon) ? ParseType() : null;
                 return new FuncType(ps, r, SpanFrom(start));
+            }
+
+            if (At(TokenKind.LParen))
+            {
+                // `()` is unit, `(T)` just groups, `(A, B, ...)` is a tuple type.
+                Advance();
+                if (Match(TokenKind.RParen)) return new NamedType("unit", [], SpanFrom(start));
+                var items = new List<TypeRef> { ParseType() };
+                while (Match(TokenKind.Comma))
+                {
+                    if (At(TokenKind.RParen)) break;
+                    items.Add(ParseType());
+                }
+                Expect(TokenKind.RParen, "')' to close the tuple type");
+                return items.Count == 1 ? items[0] : new TupleType(items, SpanFrom(start));
             }
 
             var nameTok = Expect(TokenKind.Ident, "a type name");
@@ -659,6 +736,223 @@ public sealed partial class Parser
         _t[_p] = t with { Kind = secondKind, Text = t.Text[1..], Span = span, Offset = t.Offset + 1, SpaceBefore = false, NewlineBefore = false };
     }
 
+    // ---- Phase 7: enum, pick, patterns ----
+
+    private Stmt ParseEnum()
+    {
+        var kw = Advance(); // 'enum'
+        var name = Expect(TokenKind.Ident, "an enum name after 'enum'");
+        var generics = At(TokenKind.Lt) ? ParseGenericParams() : (List<GenericParam>)[];
+        var opener = ExpectBlockOpen("'enum' body");
+        var variants = new List<EnumVariant>();
+        while (!At(TokenKind.Semicolon) && !AtEnd)
+        {
+            var vname = Expect(TokenKind.Ident, "a variant name");
+            var payloads = new List<TypeRef>();
+            if (Match(TokenKind.LParen))
+            {
+                if (!At(TokenKind.RParen))
+                    do { payloads.Add(ParseType()); } while (Match(TokenKind.Comma));
+                Expect(TokenKind.RParen, "')' to close the variant payloads");
+            }
+            variants.Add(new EnumVariant(vname.Text, payloads, SpanFrom(vname)));
+            if (!Match(TokenKind.Comma)) break;
+        }
+        CloseBlock(opener);
+        return new EnumDecl(name.Text, generics, variants, SpanFrom(kw));
+    }
+
+    private Expr ParsePick()
+    {
+        var kw = Advance(); // 'pick'
+        var subject = ParseExpr();
+        var opener = ExpectBlockOpen("'pick' arms");
+        var arms = new List<PickArm>();
+        Enter();
+        try
+        {
+            while (!At(TokenKind.Semicolon) && !AtEnd)
+            {
+                int before = _p;
+                var armStart = Cur;
+                try
+                {
+                    var pat = ParsePattern();
+                    if (At(TokenKind.Colon))
+                    {
+                        // Block arm: `Pat: statements ;`. The block closes with its own ';'; a comma after it is optional.
+                        var bodyOpen = Advance();
+                        var block = MakeBlock(bodyOpen, ParseStatements(stopAtBranch: false));
+                        CloseBlock(bodyOpen);
+                        arms.Add(new PickArm(pat, null, block, SpanFrom(armStart)));
+                        Match(TokenKind.Comma);
+                        continue;
+                    }
+                    Expect(TokenKind.FatArrow, "'=>' (or ':' to open a block) after the pattern");
+                    var body = ParseArmBody();
+                    arms.Add(new PickArm(pat, body, null, SpanFrom(armStart)));
+                }
+                catch (ParseAbort)
+                {
+                    SkipArm();
+                    if (_p == before && !At(TokenKind.Semicolon) && !AtEnd) Advance();
+                }
+
+                if (Match(TokenKind.Comma)) continue;
+                if (At(TokenKind.Semicolon) || AtEnd) break;
+                // Arms must be separated by commas; report it once and keep reading arms.
+                _diag.Report(Templates.UnexpectedToken(Cur.Span, Describe(Cur), "',' between 'pick' arms (or ';' to close the 'pick')"));
+                _lastErrorOffset = Cur.Offset;
+                if (_p == before) Advance();
+            }
+        }
+        finally { Leave(); }
+        CloseBlock(opener);
+        return new PickExpr(subject, arms, SpanFrom(kw));
+    }
+
+    /// <summary>
+    /// An arm's expression. A prelude command call (<c>print "Got {v}"</c>) is allowed, as in the spec's own example, but
+    /// takes exactly one argument because the ',' after it separates arms.
+    /// </summary>
+    private Expr ParseArmBody()
+    {
+        if (Cur.Kind == TokenKind.Ident && CommandNames.Contains(Cur.Text) && StartsCommandArgument(PeekTok()))
+        {
+            var name = Advance();
+            var arg = ParseExpr();
+            return new CallExpr(new NameExpr(name.Text, name.Span), [new Arg(null, arg, arg.Span)], SpanFrom(name));
+        }
+        return ParseExpr();
+    }
+
+    /// <summary>Skips to the ',' or ';' that ends the current arm, ignoring those inside brackets.</summary>
+    private void SkipArm()
+    {
+        int depth = 0;
+        while (!AtEnd)
+        {
+            var k = Cur.Kind;
+            if (depth == 0 && k is TokenKind.Comma or TokenKind.Semicolon) return;
+            if (k is TokenKind.LParen or TokenKind.LBracket) depth++;
+            else if (k is TokenKind.RParen or TokenKind.RBracket && depth > 0) depth--;
+            Advance();
+        }
+    }
+
+    /// <summary>An integer, char or negated-integer/float literal usable as a pattern or range bound.</summary>
+    private bool TryParsePoint(out Expr point)
+    {
+        var t = Cur;
+        point = null!;
+        switch (t.Kind)
+        {
+            case TokenKind.Int:
+                Advance();
+                point = new IntLiteral((ulong)t.Value!, t.Span);
+                return true;
+            case TokenKind.Char:
+                Advance();
+                point = new CharLiteral((int)t.Value!, t.Span);
+                return true;
+            case TokenKind.Minus when PeekTok().Kind is TokenKind.Int or TokenKind.Float:
+            {
+                Advance();
+                var n = Advance();
+                Expr lit = n.Kind == TokenKind.Int ? new IntLiteral((ulong)n.Value!, n.Span) : new FloatLiteral((double)n.Value!, n.Span);
+                point = new UnaryExpr(TokenKind.Minus, lit, SpanFrom(t));
+                return true;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private Pattern ParsePattern()
+    {
+        var t = Cur;
+
+        // Wildcard.
+        if (t.Kind == TokenKind.Ident && t.Text == "_")
+        {
+            Advance();
+            return new WildcardPat(t.Span);
+        }
+        if (t.Kind == TokenKind.True) { Advance(); return new LiteralPat(new BoolLiteral(true, t.Span), t.Span); }
+        if (t.Kind == TokenKind.False) { Advance(); return new LiteralPat(new BoolLiteral(false, t.Span), t.Span); }
+
+        // Integer / char / negative literal, possibly the start of a range pattern.
+        if (TryParsePoint(out var lo))
+        {
+            if (At(TokenKind.DotDot) || At(TokenKind.DotDotEq))
+            {
+                bool inclusive = Advance().Kind == TokenKind.DotDotEq;
+                if (!TryParsePoint(out var hi)) throw Fail(Cur, "an integer or char after '..' in a range pattern");
+                return new RangePat(lo, hi, inclusive, SpanFrom(t));
+            }
+            return new LiteralPat(lo, SpanFrom(t));
+        }
+        if (t.Kind == TokenKind.Float) { Advance(); return new LiteralPat(new FloatLiteral((double)t.Value!, t.Span), t.Span); }
+        if (t.Kind == TokenKind.String) { Advance(); return new LiteralPat(ParseTemplate(t), t.Span); }
+
+        // `()` is the unit literal; `(a, b)` is a tuple pattern; `(p)` just groups.
+        if (t.Kind == TokenKind.LParen && PeekTok().Kind == TokenKind.RParen)
+        {
+            Advance();
+            Advance();
+            return new LiteralPat(new UnitLiteral(SpanFrom(t)), SpanFrom(t));
+        }
+        if (t.Kind == TokenKind.LParen)
+        {
+            Advance();
+            Enter();
+            try
+            {
+                var first = ParsePattern();
+                if (At(TokenKind.Comma))
+                {
+                    var items = new List<Pattern> { first };
+                    while (Match(TokenKind.Comma))
+                    {
+                        if (At(TokenKind.RParen)) break;
+                        items.Add(ParsePattern());
+                    }
+                    Expect(TokenKind.RParen, "')' to close the tuple pattern");
+                    return new TuplePat(items, SpanFrom(t));
+                }
+                Expect(TokenKind.RParen, "')'");
+                return first;
+            }
+            finally { Leave(); }
+        }
+
+        // A variant (`Got(x)`, `Nada`) or a binding. Convention: a capitalised name is a variant, anything else binds.
+        if (t.Kind == TokenKind.Ident)
+        {
+            Advance();
+            if (At(TokenKind.LParen))
+            {
+                Advance();
+                Enter();
+                try
+                {
+                    var bindings = new List<Pattern>();
+                    while (!At(TokenKind.RParen))
+                    {
+                        bindings.Add(ParsePattern());
+                        if (!Match(TokenKind.Comma)) break;
+                    }
+                    Expect(TokenKind.RParen, "')' to close the variant pattern");
+                    return new VariantPat(null, t.Text, bindings, SpanFrom(t));
+                }
+                finally { Leave(); }
+            }
+            if (char.IsUpper(t.Text[0])) return new VariantPat(null, t.Text, [], t.Span);
+            return new BindPat(t.Text, t.Span);
+        }
+        throw Fail(t, "a pattern (_, a variant like Got(x), a name to bind, or a literal)");
+    }
+
     // ---- later-milestone constructs ----
 
     private Stmt ParseReserved()
@@ -666,24 +960,23 @@ public sealed partial class Parser
         var kw = Advance();
         int phase = kw.Kind switch
         {
-            TokenKind.Pick or TokenKind.Mood => 7,
-            TokenKind.Mold or TokenKind.Nuke => 8,
-            TokenKind.Quirk or TokenKind.Teach => 9,
-            TokenKind.Yolo => 10,
-            TokenKind.Brain or TokenKind.Grind => 16,
-            TokenKind.Zone => 17,
-            _ => 11, // yoink: external packages
+            TokenKind.Class or TokenKind.Drop => 8,
+            TokenKind.Trait or TokenKind.Extend => 9,
+            TokenKind.Try => 10,
+            TokenKind.Network or TokenKind.Train => 16,
+            TokenKind.Arena => 17,
+            _ => 11, // imp: external packages
         };
         _diag.Report(Templates.NotYetBuilt(kw.Span, kw.Text, phase));
 
         // Statements without a block: skip the rest of the line.
-        if (kw.Kind is TokenKind.Yoink or TokenKind.Nuke)
+        if (kw.Kind is TokenKind.Import or TokenKind.Drop)
         {
             while (!AtEnd && !Cur.NewlineBefore) Advance();
             return new ReservedStmt(kw.Text, SpanFrom(kw));
         }
 
-        // Skip the header up to its ':' (a ':' inside <...> is a quirk bound, not the block opener).
+        // Skip the header up to its ':' (a ':' inside <...> is a trait bound, not the block opener).
         int angle = 0;
         while (!AtEnd && !(At(TokenKind.Colon) && angle == 0))
         {
@@ -697,11 +990,11 @@ public sealed partial class Parser
 
         var opener = Advance();
         int depth = 1;
-        bool chainColon = false; // the ':' after meh/nah/oops continues a block instead of opening one
+        bool chainColon = false; // the ':' after elif/el/catch continues a block instead of opening one
         while (!AtEnd)
         {
             var k = Cur.Kind;
-            if (k is TokenKind.Meh or TokenKind.Nah or TokenKind.Oops) chainColon = true;
+            if (k is TokenKind.Elif or TokenKind.Else or TokenKind.Catch) chainColon = true;
             else if (k == TokenKind.Colon)
             {
                 if (chainColon) chainColon = false; else depth++;

@@ -1,28 +1,28 @@
-# hmm/meh/nah chains share one closing ';', spin in its three forms, bail/skip
-cook classify(n::i32)::txt:
-    hmm n < 0:
-        yeet "negative"
-    meh n == 0:
-        yeet "zero"
-    meh n < 10 and n % 2 == 0:
-        yeet "small even"
-    nah:
-        yeet "other"
+# if/elif/el chains share one closing ';', loop in its three forms, br/cont
+fn describe(n::i32)::txt:
+    if n < 0:
+        ret "negative"
+    elif n == 0:
+        ret "zero"
+    elif n < 10 and n % 2 == 0:
+        ret "small even"
+    el:
+        ret "other"
     ;
 ;
 
-wag i = 0
-spin while i < 20:
+var i = 0
+loop while i < 20:
     i += 1
-    hmm i % 2 == 0:
-        skip
+    if i % 2 == 0:
+        cont
     ;
-    hmm i > 7:
-        bail
+    if i > 7:
+        br
     ;
-    squish classify(i)
+    print describe(i)
 ;
 
-spin:
-    bail
+loop:
+    br
 ;

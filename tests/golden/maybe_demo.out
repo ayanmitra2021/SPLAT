@@ -1,0 +1,10 @@
+got 5 nothing
+Got(3) Nada
+true true
+Got 42
+Failed: not positive: -5
+Failed: not a number: abc
+Got(41)
+Got(2)
+Nada
+Got(12) Nada Got(2.5)

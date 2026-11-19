@@ -9,7 +9,7 @@ public enum DiagnosticCategory
     ShapeMismatch,
     TypeMismatch,
     UseAfterMove,
-    ZoneEscape,
+    ArenaEscape,
     NanMeltdown,
     FileNotFound,
     // Everyday errors later phases need
@@ -33,7 +33,7 @@ public enum DiagnosticCategory
     BadOperator,
     Redeclared,
     LoopControlOutside,
-    YeetOutside,
+    ReturnOutside,
     MissingReturn,
     BadFormat,
     CannotInfer,
@@ -46,6 +46,17 @@ public enum DiagnosticCategory
     ChainMismatch,
     UnknownCommand,
     Internal,
+    // Phase 7: ADTs, collections, generics
+    NonExhaustivePick,
+    UnreachableArm,
+    IndexOutOfRange,
+    ImmutableMutation,
+    MutateWhileIterating,
+    VariantNotFound,
+    WrongVariantArity,
+    NotHashable,
+    BadTypeArgs,
+    KeyNotFound,
 }
 
 /// <summary>One compile-time or runtime problem: comedic headline, location, and a technical fix.</summary>

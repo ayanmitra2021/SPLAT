@@ -23,7 +23,7 @@ public static class Pipeline
     /// <summary>Checks only (diagnostics, no execution).</summary>
     public static bool Check(SourceText source, DiagnosticEngine diag) => Compile(source, diag, out _, out _);
 
-    /// <param name="stdin">Where <c>slurp</c> reads from; defaults to the console.</param>
+    /// <param name="stdin">Where <c>readl</c> reads from; defaults to the console.</param>
     public static RunOutcome Run(SourceText source, DiagnosticEngine diag, TextWriter stdout, TextWriter stderr, TextReader? stdin = null)
     {
         if (!Compile(source, diag, out var program, out var info)) return RunOutcome.CompileError;

@@ -1,8 +1,8 @@
-cook check(n::i32)::i32:
-    hmm n > 2:
+fn check(n::i32)::i32:
+    if n > 2:
         rip "n got too big: {n}"
     ;
     n
 ;
-cook walk(n::i32)::i32 = check(n) + walk(n + 1)
-squish walk(0)
+fn walk(n::i32)::i32 = check(n) + walk(n + 1)
+print walk(0)

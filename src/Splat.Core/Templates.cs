@@ -26,12 +26,12 @@ public static class Templates
 
     public static Diagnostic UseAfterMove(SourceSpan span, string variable, int prevLine) => new(
         DiagnosticCategory.UseAfterMove, span,
-        $"👻 GHOST HUNTING [Line {span.Line}]: Tried to access '{variable}' after it died/moved on Line {prevLine}. We already held its funeral. Fix: Borrow with '&{variable}' instead.",
+        $"👻 GHOST HUNTING [Line {span.Line}]: Tried to access '{variable}' after it died/moved on Line {prevLine}. We already held its deinit. Fix: Borrow with '&{variable}' instead.",
         $"Borrow with '&{variable}' instead of moving it on line {prevLine}.");
 
-    public static Diagnostic ZoneEscape(SourceSpan span, string variable, string zone) => new(
-        DiagnosticCategory.ZoneEscape, span,
-        $"🚧 CONTAINMENT BREACH [Line {span.Line}]: Borrowed reference to '{variable}' tried to sneak out of zone '{zone}'. Values cannot outlive their arena.",
+    public static Diagnostic ArenaEscape(SourceSpan span, string variable, string arenaName) => new(
+        DiagnosticCategory.ArenaEscape, span,
+        $"🚧 CONTAINMENT BREACH [Line {span.Line}]: Borrowed reference to '{variable}' tried to sneak out of arena '{arenaName}'. Values cannot outlive their arena.",
         $"Return '{variable}' by value (it is promoted to the parent scope) instead of by reference.");
 
     public static Diagnostic NanMeltdown(SourceSpan span, int epoch) => new(
@@ -41,8 +41,8 @@ public static class Templates
 
     public static Diagnostic FileNotFound(SourceSpan span, string path) => new(
         DiagnosticCategory.FileNotFound, span,
-        $"🕵️ DETECTIVE FAIL [Runtime]: Looked everywhere for \"{path}\" and found pure emptiness. Fix: Check path or wrap in 'yolo: ... oops e: ... ;'.",
-        "Check the path, or wrap the call in 'yolo: ... oops e: ... ;'.");
+        $"🕵️ DETECTIVE FAIL [Runtime]: Looked everywhere for \"{path}\" and found pure emptiness. Fix: Check path or wrap in 'try: ... catch e: ... ;'.",
+        "Check the path, or wrap the call in 'try: ... catch e: ... ;'.");
 
     // ---- Extra categories (same style) ----
 
@@ -74,7 +74,7 @@ public static class Templates
     public static Diagnostic UndefinedName(SourceSpan span, string name) => new(
         DiagnosticCategory.UndefinedName, span,
         $"🔍 WHO DIS [{Where(span)}]: '{name}' has never been introduced to me. Did you invent it in a dream?",
-        $"Declare '{name}' with ':=' or 'wag' before using it, or check the spelling.");
+        $"Declare '{name}' with ':=' or 'var' before using it, or check the spelling.");
 
     public static Diagnostic WrongArgCount(SourceSpan span, string callee, int expected, int found) => new(
         DiagnosticCategory.WrongArgCount, span,
@@ -89,12 +89,12 @@ public static class Templates
     public static Diagnostic ImmutableAssign(SourceSpan span, string name) => new(
         DiagnosticCategory.ImmutableAssign, span,
         $"🧊 FROZEN SOLID [{Where(span)}]: '{name}' was declared immutable and you tried to change it anyway.",
-        $"Declare it with 'wag {name} = ...' if it needs to change.");
+        $"Declare it with 'var {name} = ...' if it needs to change.");
 
     public static Diagnostic StackOverflow(SourceSpan span, int depth) => new(
         DiagnosticCategory.StackOverflow, span,
         $"🥞 STACK OVERFLOW [{Where(span)}]: {depth} calls deep and still going. Recursion has left the chat.",
-        "Add a base case, or turn the recursion into a 'spin' loop.");
+        "Add a base case, or turn the recursion into a 'loop'.");
 
     // ---- Parser structure errors ----
 
@@ -105,8 +105,8 @@ public static class Templates
 
     public static Diagnostic OrphanBranch(SourceSpan span, string keyword) => new(
         DiagnosticCategory.OrphanBranch, span,
-        $"🍂 ORPHAN BRANCH [Line {span.Line}]: '{keyword}' showed up with no 'hmm' to belong to.",
-        "Start the chain with 'hmm condition:', and keep 'nah' as the last branch.");
+        $"🍂 ORPHAN BRANCH [Line {span.Line}]: '{keyword}' showed up with no 'if' to belong to.",
+        "Start the chain with 'if condition:', and keep 'el' as the last branch.");
 
     public static Diagnostic NotAssignable(SourceSpan span) => new(
         DiagnosticCategory.NotAssignable, span,
@@ -128,7 +128,7 @@ public static class Templates
     public static Diagnostic NotCallable(SourceSpan span, string found) => new(
         DiagnosticCategory.NotCallable, span,
         $"📞 WRONG NUMBER [Line {span.Line}]: Tried to call a '{found}'. It does not pick up.",
-        "Only functions (cook declarations, lambdas, conversions like 'mid(x)') can be called.");
+        "Only functions (fn declarations, lambdas, conversions like 'f32(x)') can be called.");
 
     public static Diagnostic BadOperator(SourceSpan span, string op, string left, string? right, string fix) => new(
         DiagnosticCategory.BadOperator, span,
@@ -144,18 +144,18 @@ public static class Templates
 
     public static Diagnostic LoopControlOutside(SourceSpan span, string keyword) => new(
         DiagnosticCategory.LoopControlOutside, span,
-        $"🎢 NO RIDE [Line {span.Line}]: '{keyword}' only works inside a 'spin' loop, and you are not in one.",
-        $"Move '{keyword}' into a 'spin' body.");
+        $"🎢 NO RIDE [Line {span.Line}]: '{keyword}' only works inside a 'loop', and you are not in one.",
+        $"Move '{keyword}' into a 'loop' body.");
 
-    public static Diagnostic YeetOutside(SourceSpan span) => new(
-        DiagnosticCategory.YeetOutside, span,
-        $"🏃 NOWHERE TO GO [Line {span.Line}]: 'yeet' returns from a function and there is no function here.",
-        "Use 'yeet' inside a 'cook', or delete it.");
+    public static Diagnostic ReturnOutside(SourceSpan span) => new(
+        DiagnosticCategory.ReturnOutside, span,
+        $"🏃 NOWHERE TO GO [Line {span.Line}]: 'ret' returns from a function and there is no function here.",
+        "Use 'ret' inside a 'fn', or delete it.");
 
     public static Diagnostic MissingReturn(SourceSpan span, string function, string expected) => new(
         DiagnosticCategory.MissingReturn, span,
         $"🕳️ ENDS ABRUPTLY [Line {span.Line}]: '{function}' promises a '{expected}' but some path just stops talking.",
-        $"Make every path 'yeet' a '{expected}' (or end the body with a '{expected}' expression, and give 'hmm' chains a 'nah').");
+        $"Make every path 'ret' a '{expected}' (or end the body with a '{expected}' expression, and give 'if' chains an 'el').");
 
     public static Diagnostic BadFormat(SourceSpan span, string spec, string problem) => new(
         DiagnosticCategory.BadFormat, span,
@@ -206,8 +206,60 @@ public static class Templates
         $"📉 MATH SAYS NO [{Where(span)}]: {problem}",
         "Check the operands before the operation.");
 
+    public static Diagnostic BadTypeArgs(SourceSpan span, string type, int expected, int found) => new(
+        DiagnosticCategory.BadTypeArgs, span,
+        $"🧩 WRONG TYPE ARGS [{Where(span)}]: '{type}' takes {expected} type argument(s) but got {found}. Generics are not a buffet.",
+        expected == 0 ? $"Write '{type}' without '<...>'." : $"Write '{type}<{string.Join(", ", Enumerable.Range(1, expected).Select(i => "T" + i))}>' with exactly {expected} type argument(s).");
+
+    public static Diagnostic KeyNotFound(SourceSpan span, string key) => new(
+        DiagnosticCategory.KeyNotFound, span,
+        $"🗝️ KEY NOT FOUND [{Where(span)}]: The map has no entry for {key}. It looked under the doormat too.",
+        "Check with 'key in map' first, or use 'map.get(key)', which returns a Maybe.");
+
     public static Diagnostic Internal(SourceSpan span, string detail) => new(
         DiagnosticCategory.Internal, span,
         $"🔧 OUR BAD [{Where(span)}]: The compiler tripped over its own shoelaces: {detail}",
         "This is a SPLAT bug; please report it.");
+
+    // ---- Phase 7: ADTs, collections, generics ----
+
+    public static Diagnostic NonExhaustivePick(SourceSpan span, string missing) => new(
+        DiagnosticCategory.NonExhaustivePick, span,
+        $"🕵️ MISSING CASE [Line {span.Line}]: Your 'pick' forgot about variant(s): {missing}. The uncovered cases are filing a complaint.",
+        $"Add arms for: {missing}, or add a wildcard '_' catch-all.");
+
+    public static Diagnostic UnreachableArm(SourceSpan span) => new(
+        DiagnosticCategory.UnreachableArm, span,
+        $"💤 DEAD END [Line {span.Line}]: This 'pick' arm can never be reached. An earlier arm already covered all matching cases.",
+        "Remove the unreachable arm, or reorder the arms.", Severity.Warning);
+
+    public static Diagnostic IndexOutOfRange(SourceSpan span, long index, long length) => new(
+        DiagnosticCategory.IndexOutOfRange, span,
+        $"📍 OUT OF BOUNDS [{Where(span)}]: Index {index} is not in [0, {length}). The list does not go that far.",
+        $"Use an index in 0..{length}, or check the length first.");
+
+    public static Diagnostic ImmutableMutation(SourceSpan span, string name) => new(
+        DiagnosticCategory.ImmutableMutation, span,
+        $"🧊 ICE BREAKER [{Where(span)}]: Tried to mutate '{name}' in a read-only context. Some collections are immutable.",
+        $"Declare '{name}' with 'var' to make it mutable.");
+
+    public static Diagnostic MutateWhileIterating(SourceSpan span, string name) => new(
+        DiagnosticCategory.MutateWhileIterating, span,
+        $"🔄 DON'T TOUCH [{Where(span)}]: '{name}' is being iterated and you tried to modify it at the same time. This ends badly.",
+        $"Iterate over a copy ('var copy = {name}') or collect the changes in another variable and apply them after the loop.");
+
+    public static Diagnostic VariantNotFound(SourceSpan span, string enumName, string variant) => new(
+        DiagnosticCategory.VariantNotFound, span,
+        $"🔍 PHANTOM VARIANT [{Where(span)}]: '{enumName}' has no variant named '{variant}'. Did you dream it up?",
+        $"Check the '{enumName}' declaration for the actual variant names.");
+
+    public static Diagnostic WrongVariantArity(SourceSpan span, string variant, int expected, int found) => new(
+        DiagnosticCategory.WrongVariantArity, span,
+        $"🧮 WRONG PAYLOAD [{Where(span)}]: Variant '{variant}' expects {expected} payload(s) but got {found}.",
+        $"Provide exactly {expected} payload(s) for '{variant}'.");
+
+    public static Diagnostic NotHashable(SourceSpan span, string type) => new(
+        DiagnosticCategory.NotHashable, span,
+        $"🎲 NOT A KEY [{Where(span)}]: '{type}' cannot be a Map or Set key. Only integers, char, txt, bool and tuples thereof are hashable.",
+        "Use a hashable key type (i32, txt, char, bool, or a tuple of those).");
 }

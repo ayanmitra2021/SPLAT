@@ -1,27 +1,27 @@
 # Primes below 60 by trial division (arrays arrive in Milestone 3, so no true sieve yet)
-cook is_prime(n::i32)::bit:
-    hmm n < 2:
-        yeet nop
+fn is_prime(n::i32)::bool:
+    if n < 2:
+        ret false
     ;
-    wag d = 2
-    spin while d * d <= n:
-        hmm n % d == 0:
-            yeet nop
+    var d = 2
+    loop while d * d <= n:
+        if n % d == 0:
+            ret false
         ;
         d += 1
     ;
-    yep
+    true
 ;
 
-wag count = 0
-spin n in 2..60:
-    hmm !is_prime(n):
-        skip
+var count = 0
+loop n in 2..60:
+    if !is_prime(n):
+        cont
     ;
     count += 1
-    squish "prime #{count}: {n}"
-    hmm count == 12:
-        bail
+    print "prime #{count}: {n}"
+    if count == 12:
+        br
     ;
 ;
-squish "stopped after {count} primes"
+print "stopped after {count} primes"

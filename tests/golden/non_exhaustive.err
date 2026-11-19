@@ -1,0 +1,21 @@
+[SE00400] 🕵️ MISSING CASE [Line 9]: Your 'pick' forgot about variant(s): Yellow. The uncovered cases are filing a complaint.
+  --> non_exhaustive.splat:9:5
+   |
+ 9 |     pick l:
+   |     ^^^^^^^...
+  Fix: Add arms for: Yellow, or add a wildcard '_' catch-all.
+
+[SE00400] 🕵️ MISSING CASE [Line 17]: Your 'pick' forgot about variant(s): Got(Nada). The uncovered cases are filing a complaint.
+  --> non_exhaustive.splat:17:5
+    |
+ 17 |     pick m:
+    |     ^^^^^^^...
+  Fix: Add arms for: Got(Nada), or add a wildcard '_' catch-all.
+
+[SE00400] 🕵️ MISSING CASE [Line 25]: Your 'pick' forgot about variant(s): -2147483648..=-1, 100..=2147483647. The uncovered cases are filing a complaint.
+  --> non_exhaustive.splat:25:5
+    |
+ 25 |     pick n:
+    |     ^^^^^^^...
+  Fix: Add arms for: -2147483648..=-1, 100..=2147483647, or add a wildcard '_' catch-all.
+

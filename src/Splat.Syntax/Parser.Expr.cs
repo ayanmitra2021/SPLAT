@@ -3,7 +3,7 @@ using Splat.Core;
 namespace Splat.Syntax;
 
 // Pratt expression parser. The binary table follows spec 8.1 (levels 5-11); Phase 4 adds lambdas, norms, calculus,
-// reductions, guess/judge and the data-engine forms on top of this skeleton.
+// reductions, regress/classify and the data-engine forms on top of this skeleton.
 public sealed partial class Parser
 {
     // Binding powers (higher binds tighter). Gaps leave room for the spec's other levels.
@@ -54,10 +54,11 @@ public sealed partial class Parser
     internal static int PrecReduceBody => BpAdd;
 
     private static bool CanStartExpr(Token t) => t.Kind is
-        TokenKind.Int or TokenKind.Float or TokenKind.String or TokenKind.Char or TokenKind.Ident or TokenKind.Yep
-        or TokenKind.Nop or TokenKind.Me or TokenKind.Elder or TokenKind.LParen or TokenKind.LBracket
+        TokenKind.Int or TokenKind.Float or TokenKind.String or TokenKind.Char or TokenKind.Ident or TokenKind.True
+        or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.LParen or TokenKind.LBracket
         or TokenKind.Minus or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde or TokenKind.Pipe
-        or TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod or TokenKind.Guess or TokenKind.Judge;
+        or TokenKind.Pick or TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod
+        or TokenKind.Regress or TokenKind.Classify;
 
     private Expr ParseExpr(int minBp = 0)
     {
@@ -81,10 +82,12 @@ public sealed partial class Parser
             var t = Cur;
             switch (t.Kind)
             {
-                case TokenKind.LParen:
+                // A '(' or '[' that starts a new line begins a new statement instead of calling or indexing the value
+                // before it, so `(a, b) := f()` and `[1, 2].push(3)` can start a line.
+                case TokenKind.LParen when !t.NewlineBefore:
                     left = ParseCall(left);
                     continue;
-                case TokenKind.LBracket:
+                case TokenKind.LBracket when !t.NewlineBefore:
                     left = ParseIndex(left);
                     continue;
                 case TokenKind.Dot:
@@ -181,16 +184,16 @@ public sealed partial class Parser
             case TokenKind.Char:
                 Advance();
                 return new CharLiteral((int)t.Value!, t.Span);
-            case TokenKind.Yep:
+            case TokenKind.True:
                 Advance();
                 return new BoolLiteral(true, t.Span);
-            case TokenKind.Nop:
+            case TokenKind.False:
                 Advance();
                 return new BoolLiteral(false, t.Span);
             case TokenKind.String:
                 Advance();
                 return ParseTemplate(t);
-            case TokenKind.Ident or TokenKind.Me or TokenKind.Elder:
+            case TokenKind.Ident or TokenKind.Self or TokenKind.Super:
                 Advance();
                 return new NameExpr(t.Text, t.Span);
             case TokenKind.Pipe:
@@ -201,7 +204,7 @@ public sealed partial class Parser
                 return ParseInteg();
             case TokenKind.Sum or TokenKind.Prod when PeekTok().Kind == TokenKind.LBracket:
                 return ParseReduce();
-            case TokenKind.Guess or TokenKind.Judge:
+            case TokenKind.Regress or TokenKind.Classify:
                 return ParseFit();
             case TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod:
                 // Not followed by '(' / '[': an ordinary name, so `sum(v)` and `map(xs, sum)` work.
@@ -213,11 +216,25 @@ public sealed partial class Parser
                 var operand = ParseExpr(BpUnary);
                 return new UnaryExpr(t.Kind, operand, _src.Join(t.Span, operand.Span));
             }
+            case TokenKind.Pick:
+                return ParsePick();
             case TokenKind.LParen:
             {
                 Advance();
                 if (Match(TokenKind.RParen)) return new UnitLiteral(SpanFrom(t));
                 var inner = ParseExpr();
+                // Tuple detection: (a, b, ...) with two or more items
+                if (At(TokenKind.Comma))
+                {
+                    var items = new List<Expr> { inner };
+                    while (Match(TokenKind.Comma))
+                    {
+                        if (At(TokenKind.RParen)) break; // trailing comma
+                        items.Add(ParseExpr());
+                    }
+                    Expect(TokenKind.RParen, "')' to close the tuple");
+                    return new TupleExpr(items, SpanFrom(t));
+                }
                 Expect(TokenKind.RParen, "')' to close the parenthesis");
                 return inner;
             }
@@ -263,6 +280,13 @@ public sealed partial class Parser
             else
             {
                 var v = ParseExpr();
+                // `key => value`: a pair, used by map(...)
+                if (At(TokenKind.FatArrow))
+                {
+                    Advance();
+                    var pv = ParseExpr();
+                    v = new PairExpr(v, pv, _src.Join(v.Span, pv.Span));
+                }
                 args.Add(new Arg(null, v, v.Span));
             }
             if (!Match(TokenKind.Comma)) break;
@@ -384,7 +408,7 @@ public sealed partial class Parser
         return new ReduceExpr(kw.Kind == TokenKind.Prod, v.Text, v.Span, range, body, SpanFrom(kw));
     }
 
-    /// <summary>guess(cfg) fit (X, y) / judge(cfg) fit (X, y)</summary>
+    /// <summary>regress(cfg) fit (X, y) / classify(cfg) fit (X, y)</summary>
     private Expr ParseFit()
     {
         var kw = Advance();
@@ -397,7 +421,7 @@ public sealed partial class Parser
         Expect(TokenKind.Comma, "',' between the features and the targets");
         var y = ParseExpr();
         Expect(TokenKind.RParen, "')' to close fit (...)");
-        return new FitExpr(kw.Kind == TokenKind.Judge, cfg, x, y, SpanFrom(kw));
+        return new FitExpr(kw.Kind == TokenKind.Classify, cfg, x, y, SpanFrom(kw));
     }
 
     private Expr ParseIndex(Expr target)

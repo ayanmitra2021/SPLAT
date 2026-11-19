@@ -1,6 +1,6 @@
 #- Tensors, math and a few
    operators  #- nested -#  still commented -#
-A::mid[3, 4] = zeros(3, 4)
+A::f32[3, 4] = zeros(3, 4)
 B := A'
 C := A @ B
 w := ||C||_F ** 2
@@ -9,5 +9,5 @@ total := ∑[i in 0..10] i * i
 col := A[:, 0..3]
 y := A \ b
 dot := u · v
-loss := ||u - v|| + ||u||_1 and nop
+loss := ||u - v|| + ||u||_1 and false
 s := 1_000 + 0xFF + 0b1010 + 3.14 + 1e-4

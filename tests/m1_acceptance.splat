@@ -1,102 +1,105 @@
 # SPLAT Milestone 1 acceptance script.
 # Demonstrates every Milestone 1 bullet of the spec: lexer, Pratt expression parser, ':' / ';' blocks, variables
-# (':=' and 'wag'), hmm/meh/nah, spin, squish/slurp, and the type checker. Run as:
+# (':=' and 'var'), if/elif/el, loop, print/readl, and the type checker. Run as:
 #     splat run tests/m1_acceptance.splat < tests/m1_acceptance.in
 # (the comedic diagnostics are exercised by the 'error tour' tests that accompany this file).
 
 #- Block comments #- nest -# so commented-out code may contain them -#
 
 # ---- literals, operators, precedence (lexer + Pratt parser) ----
-squish "ints:", 1_000, 0xFF, 0b1010, 7 / 2, -7 / 2, 7 % 3
-squish "floats:", 1.5, 2.0 ** 0.5 > 1.41, 7.0 / 2.0
-squish "power:", 2 ** 3 ** 2, -2 ** 2, (1 + 2) * 3 - 4
-squish "logic:", yep and nop or yep, !(1 > 2), 1 + 1 == 2 and 2 + 2 == 4
-squish "text:", "ab" + "cd", c"x", upper("shout"), len("héllo")
-squish "ranges:", 0..5, 1..=3, 0..10 by 5, rev(1..4)
+print "ints:", 1_000, 0xFF, 0b1010, 7 / 2, -7 / 2, 7 % 3
+print "floats:", 1.5, 2.0 ** 0.5 > 1.41, 7.0 / 2.0
+print "power:", 2 ** 3 ** 2, -2 ** 2, (1 + 2) * 3 - 4
+print "logic:", true and false or true, !(1 > 2), 1 + 1 == 2 and 2 + 2 == 4
+print "text:", "ab" + "cd", c"x", upper("shout"), len("héllo")
+print "ranges:", 0..5, 1..=3, 0..10 by 5, rev(1..4)
 
-# ---- variables: immutable ':=', annotated '::T =', mutable 'wag' ----
+# ---- variables: immutable ':=', annotated '::T =', mutable 'var' ----
 answer := 40 + 2
-ratio::mid = 0.25
-wag counter = 0
+ratio::f32 = 0.25
+var counter = 0
 counter += 5
 counter *= 2
-squish "vars:", answer, ratio, counter
-squish "conversions:", mid(answer) * ratio, i64(counter) + 1, txt(answer) + "!"
-squish "interp: {answer} {ratio:.3} {counter:04} {answer:x} {counter:>5}|"
+print "vars:", answer, ratio, counter
+print "conversions:", f32(answer) * ratio, i64(counter) + 1, txt(answer) + "!"
+print "interp: {answer} {ratio:.3} {counter:04} {answer:x} {counter:>5}|"
 
-# ---- hmm / meh / nah ----
-cook classify(n::i32)::txt:
-    hmm n < 0:
-        yeet "negative"
-    meh n == 0:
-        yeet "zero"
-    meh n in (1, 2, 3):
-        yeet "tiny"
-    nah:
-        yeet "big"
+# ---- if / elif / el ----
+fn describe(n::i32)::txt:
+    if n < 0:
+        ret "negative"
+    elif n == 0:
+        ret "zero"
+    elif n in (1, 2, 3):
+        ret "tiny"
+    el:
+        ret "big"
     ;
 ;
-squish classify(-5), classify(0), classify(2), classify(99)
+print describe(-5), describe(0), describe(2), describe(99)
 
-# ---- spin: while, forever with bail/skip, over ranges and txt, stepped and chained ----
-wag n = 0
-spin while n < 3:
+# ---- loop: while, forever with br/cont, over ranges and txt, stepped and chained ----
+var n = 0
+loop while n < 3:
     n += 1
 ;
-wag total = 0
-spin:
+var total = 0
+loop:
     total += 1
-    hmm total == 4:
-        bail
+    if total == 4:
+        br
     ;
 ;
-wag evens = ""
-spin i in 0..10:
-    hmm i % 2 == 1:
-        skip
+var evens = ""
+loop i in 0..10:
+    if i % 2 == 1:
+        cont
     ;
     evens = evens + "{i} "
 ;
-wag vowels = 0
-spin c in "milestone one":
-    hmm c in (c"a", c"e", c"i", c"o", c"u"):
+var vowels = 0
+loop c in "milestone one":
+    if c in (c"a", c"e", c"i", c"o", c"u"):
         vowels += 1
     ;
 ;
-wag chained = ""
-spin k in 0..2 then 10..=11 then rev(20..22):
+var chained = ""
+loop k in 0..2 then 10..=11 then rev(20..22):
     chained = chained + "{k} "
 ;
-squish "loops:", n, total, evens, vowels, chained
+print "loops:", n, total, evens, vowels, chained
 
 # ---- functions: recursion, closures, higher-order, pipes ----
-cook fact(n::i64)::i64:
-    hmm n <= 1:
-        yeet 1
+fn fact(n::i64)::i64:
+    if n <= 1:
+        ret 1
     ;
     n * fact(n - 1)
 ;
-cook fib(n::i32)::i32:
-    hmm n < 2:
-        yeet n
+fn fib(n::i32)::i32:
+    if n < 2:
+        ret n
     ;
     fib(n - 1) + fib(n - 2)
 ;
-cook make_counter(start::i32)::cook()::i32:
-    wag c = start
-    cook next()::i32:
+fn make_counter(start::i32)::fn()::i32:
+    var c = start
+    fn next()::i32:
         c += 1
-        yeet c
+        ret c
     ;
-    yeet next
+    ret next
 ;
-cook twice(f::cook(i32)::i32, x::i32)::i32 = f(f(x))
-cook add(a::i32, b::i32)::i32 = a + b
+fn twice(f::fn(i32)::i32, x::i32)::i32 = f(f(x))
+fn add(a::i32, b::i32)::i32 = a + b
 tick := make_counter(10)
-squish "functions:", fact(10), fib(15), twice(|x| x * 3, 7), tick(), tick(), 10 |> add(5) |> add(1)
+print "functions:", fact(10), fib(15), twice(|x| x * 3, 7), tick(), tick(), 10 |> add(5) |> add(1)
 
-# ---- slurp: line input from stdin ----
-who := slurp("Who goes there? ")
-number := parse_i32(slurp())
-squish "Hello, {who}! Your number plus one is {number + 1}."
-squish "milestone 1 complete"
+# ---- readl: line input from stdin ----
+who := readl("Who goes there? ")
+number := pick parse_i32(readl()):
+    Got(n) => n,
+    Nada => 0
+;
+print "Hello, {who}! Your number plus one is {number + 1}."
+print "milestone 1 complete"

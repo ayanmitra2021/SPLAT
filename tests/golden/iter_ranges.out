@@ -4,6 +4,6 @@ rev:        4 3 2 1 0
 rev by 4:   8 4 0 
 empty:      []
 by a variable: 735
-yep nop nop yep yep
+true false false true true
 0..10 by 2 rev(1..=4)
 i64 range took 3 steps

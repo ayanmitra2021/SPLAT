@@ -1,16 +1,16 @@
 # Classic FizzBuzz in SPLAT
-cook fizz(n::i32)::txt:
-    hmm n % 15 == 0:
-        yeet "FizzBuzz"
-    meh n % 3 == 0:
-        yeet "Fizz"
-    meh n % 5 == 0:
-        yeet "Buzz"
-    nah:
-        yeet "{n}"
+fn fizz(n::i32)::txt:
+    if n % 15 == 0:
+        ret "FizzBuzz"
+    elif n % 3 == 0:
+        ret "Fizz"
+    elif n % 5 == 0:
+        ret "Buzz"
+    el:
+        ret "{n}"
     ;
 ;
 
-spin i in 1..=15:
-    squish fizz(i)
+loop i in 1..=15:
+    print fizz(i)
 ;

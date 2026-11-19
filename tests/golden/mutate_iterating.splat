@@ -1,0 +1,29 @@
+# Modifying a collection while iterating it is a compile error where the checker can see it.
+var xs = [1, 2, 3]
+loop x in xs:
+    xs = [4, 5, 6]
+;
+
+var ys = [1, 2]
+loop y in ys:
+    ys.push(y)
+;
+
+var zs = [1]
+loop z in zs:
+    if z > 0:
+        zs[0] = 5
+    ;
+;
+
+var m = map("a" => 1)
+loop k, v in m:
+    m["b"] = v
+;
+
+# Iterating a copy is fine, and so is changing a different collection.
+var ok = [1, 2, 3]
+var out = [0]
+loop x in ok:
+    out.push(x)
+;

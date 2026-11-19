@@ -1,7 +1,10 @@
-# slurp reads one line from stdin (and echoes an optional prompt first).
-name := slurp("name? ")
-squish "Hello, {name}!"
-age := parse_i32(slurp())
-squish "Next year you will be {age + 1}."
-rest := slurp()
-squish "[{rest}] [{slurp()}]"
+# readl reads one line from stdin (and echoes an optional prompt first).
+name := readl("name? ")
+print "Hello, {name}!"
+age := pick parse_i32(readl()):
+    Got(n) => n,
+    Nada => 0
+;
+print "Next year you will be {age + 1}."
+rest := readl()
+print "[{rest}] [{readl()}]"

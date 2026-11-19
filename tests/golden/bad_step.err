@@ -1,35 +1,35 @@
 [SE00113] 🐌 STEP BROTHER [Line 2]: A step of 0 would never get anywhere. Ranges walk forward in steps of 1 or more.
   --> bad_step.splat:2:20
    |
- 2 | spin i in 0..10 by 0:
+ 2 | loop i in 0..10 by 0:
    |                    ^
   Fix: Use a step of at least 1 (for example '0..10 by 2'); to count down, wrap the range in 'rev(...)'.
 
 [SE00113] 🐌 STEP BROTHER [Line 5]: A step of -2 would never get anywhere. Ranges walk forward in steps of 1 or more.
   --> bad_step.splat:5:20
    |
- 5 | spin i in 10..0 by -2:
+ 5 | loop i in 10..0 by -2:
    |                    ^^
   Fix: Use a step of at least 1 (for example '0..10 by 2'); to count down, wrap the range in 'rev(...)'.
 
 [SE00114] 🔗 BROKEN CHAIN [Line 8]: Tried to link a 'char' part onto a chain of 'i32'. Every link must be the same metal.
   --> bad_step.splat:8:21
    |
- 8 | spin x in 0..3 then "abc":
+ 8 | loop x in 0..3 then "abc":
    |                     ^^^^^
   Fix: Every part of a 'then' chain must produce 'i32'; convert or replace this part.
 
-[SE00100] 🎭 IDENTITY CRISIS [Line 11]: Tried to shove a 'i32' into a 'something iterable (a range, a txt, ...)' slot. I'm strictly typed, bestie.
+[SE00100] 🎭 IDENTITY CRISIS [Line 11]: Tried to shove a 'i32' into a 'something iterable (a range, txt, List, Set, or Map)' slot. I'm strictly typed, bestie.
   --> bad_step.splat:11:11
     |
- 11 | spin x in 42:
+ 11 | loop x in 42:
     |           ^^
-  Fix: Provide a value of type 'something iterable (a range, a txt, ...)', or change the declared type to 'i32'.
+  Fix: Provide a value of type 'something iterable (a range, txt, List, Set, or Map)', or change the declared type to 'i32'.
 
-[SE00100] 🎭 IDENTITY CRISIS [Line 14]: Tried to shove a 'i32' into a 'something to look inside (a range, a txt, a chain, or a list like '(a, b, c)')' slot. I'm strictly typed, bestie.
+[SE00100] 🎭 IDENTITY CRISIS [Line 14]: Tried to shove a 'i32' into a 'something to look inside (a range, txt, chain, List, Set, Map, or a literal like '(a, b, c)')' slot. I'm strictly typed, bestie.
   --> bad_step.splat:14:11
     |
  14 | b := 5 in 5
     |           ^
-  Fix: Provide a value of type 'something to look inside (a range, a txt, a chain, or a list like '(a, b, c)')', or change the declared type to 'i32'.
+  Fix: Provide a value of type 'something to look inside (a range, txt, chain, List, Set, Map, or a literal like '(a, b, c)')', or change the declared type to 'i32'.
 

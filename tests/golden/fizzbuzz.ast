@@ -1,11 +1,11 @@
-(cook
+(fn
   fizz
   (params (n i32))
   (-> txt)
   (block
-    (hmm
-      (if (== (% n 15) 0) (block (yeet "FizzBuzz")))
-      (if (== (% n 3) 0) (block (yeet "Fizz")))
-      (if (== (% n 5) 0) (block (yeet "Buzz")))
-      (else (block (yeet (str (interp n))))))))
-(spin-in i (..= 1 15) (block (call squish (call fizz i))))
+    (if
+      (if (== (% n 15) 0) (block (ret "FizzBuzz")))
+      (if (== (% n 3) 0) (block (ret "Fizz")))
+      (if (== (% n 5) 0) (block (ret "Buzz")))
+      (else (block (ret (str (interp n))))))))
+(loop-in i (..= 1 15) (block (call print (call fizz i))))

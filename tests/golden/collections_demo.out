@@ -1,0 +1,42 @@
+[9, 3, 1, 2, 4] 5 9 [3, 1] [9, 3, 1, 2, 4, 7, 7]
+Got(4) [9, 3, 1, 2]
+3 [9, 1, 2]
+[100, 6, 2]
+true false
+Nada 0
+[the quick brown fox] 1
+[a, b, c] 3
+[the, quick, brown, fox]
+3 4
+set{3, 1, 2} 3 true false
+set{1, 5} true false set{1}
+map{ada: 95, alan: 85, grace: 99} 95 3
+true false
+Nada Got(95)
+Got(85) Nada 2
+(1, one, true) 1 one true
+true false
+10
+20
+30
+ada: 95
+grace: 99
+0 a
+1 b
+2 c
+(1, one)
+(2, two)
+3
+2
+1
+5
+6
+1
+2
+10
+20
+100
+101
+sum 108
+true false true true
+true true false

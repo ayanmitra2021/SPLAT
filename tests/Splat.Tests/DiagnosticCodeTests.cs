@@ -11,18 +11,22 @@ public class DiagnosticCodeTests
     private static IEnumerable<Diagnostic> AllTemplates() =>
     [
         Templates.MissingSemicolon(S, 1), Templates.ShapeMismatch(S, "a", "b", "1", "2"), Templates.TypeMismatch(S, "a", "b"),
-        Templates.UseAfterMove(S, "x", 1), Templates.ZoneEscape(S, "x", "z"), Templates.NanMeltdown(S, 1),
+        Templates.UseAfterMove(S, "x", 1), Templates.ArenaEscape(S, "x", "z"), Templates.NanMeltdown(S, 1),
         Templates.FileNotFound(S, "p"), Templates.UnexpectedToken(S, "a", "b"), Templates.UnterminatedString(S),
         Templates.UnterminatedComment(S), Templates.BadCharacter(S, 'x'), Templates.BadLiteral(S, "p", "f"),
         Templates.UndefinedName(S, "x"), Templates.WrongArgCount(S, "f", 1, 2), Templates.DivideByZero(S),
         Templates.ImmutableAssign(S, "x"), Templates.StackOverflow(S, 1), Templates.StraySemicolon(S),
-        Templates.OrphanBranch(S, "meh"), Templates.NotAssignable(S), Templates.NotYetBuilt(S, "mold", 8),
+        Templates.OrphanBranch(S, "elif"), Templates.NotAssignable(S), Templates.NotYetBuilt(S, "class", 8),
         Templates.TooDeep(S), Templates.Internal(S, "d"),
         Templates.NotCallable(S, "i32"), Templates.BadOperator(S, "+", "a", "b", "f"), Templates.Redeclared(S, "x", 1),
-        Templates.LoopControlOutside(S, "bail"), Templates.YeetOutside(S), Templates.MissingReturn(S, "f", "i32"),
+        Templates.LoopControlOutside(S, "br"), Templates.ReturnOutside(S), Templates.MissingReturn(S, "f", "i32"),
         Templates.BadFormat(S, ".3", "p"), Templates.CannotInfer(S, "w", "f"), Templates.IntegerOverflow(S, "i32", "+"),
         Templates.Panic(S, "m", null), Templates.BadConversion(S, "v", "i8"), Templates.MathDomain(S, "p"),
         Templates.BadStep(S, "0"), Templates.ChainMismatch(S, "char", "i32"), Templates.UnknownCommand(S, ":x"),
+        Templates.NonExhaustivePick(S, "Nada"), Templates.UnreachableArm(S), Templates.IndexOutOfRange(S, 5, 3),
+        Templates.ImmutableMutation(S, "x"), Templates.MutateWhileIterating(S, "xs"),
+        Templates.VariantNotFound(S, "Maybe", "Oops"), Templates.WrongVariantArity(S, "Got", 1, 2),
+        Templates.NotHashable(S, "f32"), Templates.BadTypeArgs(S, "Maybe", 1, 2), Templates.KeyNotFound(S, "\"k\""),
     ];
 
     [Fact]

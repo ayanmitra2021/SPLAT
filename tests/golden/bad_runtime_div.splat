@@ -1,4 +1,4 @@
-cook ratio(a::i32, b::i32)::i32 = a / b
-squish "before"
-squish ratio(10, 0)
-squish "never printed"
+fn ratio(a::i32, b::i32)::i32 = a / b
+print "before"
+print ratio(10, 0)
+print "never printed"

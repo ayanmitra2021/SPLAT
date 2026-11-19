@@ -1,0 +1,56 @@
+[SE00404] 🧊 ICE BREAKER [Line 3]: Tried to mutate 'xs' in a read-only context. Some collections are immutable.
+  --> bad_collections.splat:3:1
+   |
+ 3 | xs.push(4)
+   | ^^
+  Fix: Declare 'xs' with 'var' to make it mutable.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 6]: Tried to shove a 'txt' into a 'i32' slot. I'm strictly typed, bestie.
+  --> bad_collections.splat:6:9
+   |
+ 6 | ys.push("three")
+   |         ^^^^^^^
+  Fix: Provide a value of type 'i32', or change the declared type to 'txt'.
+
+[SE00406] 🎲 NOT A KEY [Line 8]: 'f32' cannot be a Map or Set key. Only integers, char, txt, bool and tuples thereof are hashable.
+  --> bad_collections.splat:8:10
+   |
+ 8 | s := set(1.5, 2.5)
+   |          ^^^
+  Fix: Use a hashable key type (i32, txt, char, bool, or a tuple of those).
+
+[SE00112] 🔮 CRYSTAL BALL BROKEN [Line 9]: Cannot work out the element type of '[]'.
+  --> bad_collections.splat:9:9
+   |
+ 9 | var e = []
+   |         ^^
+  Fix: Annotate it: xs::List<i32> = []
+
+[SE00115] 🧩 WRONG TYPE ARGS [Line 10]: 'Maybe' takes 1 type argument(s) but got 0. Generics are not a buffet.
+  --> bad_collections.splat:10:4
+    |
+ 10 | x::Maybe = Nada
+    |    ^^^^^
+  Fix: Write 'Maybe<T1>' with exactly 1 type argument(s).
+
+[SE00115] 🧩 WRONG TYPE ARGS [Line 11]: 'Maybe' takes 1 type argument(s) but got 2. Generics are not a buffet.
+  --> bad_collections.splat:11:4
+    |
+ 11 | y::Maybe<i32, txt> = Nada
+    |    ^^^^^^^^^^^^^^^
+  Fix: Write 'Maybe<T1>' with exactly 1 type argument(s).
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 12]: Tried to shove a 'Maybe<txt>' into a 'Maybe<i32>' slot. I'm strictly typed, bestie.
+  --> bad_collections.splat:12:17
+    |
+ 12 | z::Maybe<i32> = Got("text")
+    |                 ^^^^^^^^^^^
+  Fix: Provide a value of type 'Maybe<i32>', or change the declared type to 'Maybe<txt>'.
+
+[SE00401] 🔍 PHANTOM VARIANT [Line 19]: 'Light' has no variant named 'Blue'. Did you dream it up?
+  --> bad_collections.splat:19:5
+    |
+ 19 |     Blue => 1,
+    |     ^^^^
+  Fix: Check the 'Light' declaration for the actual variant names.
+

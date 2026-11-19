@@ -1,7 +1,7 @@
 [SE00001] 💀 OOF [Line 1]: You opened a ':' and walked away like an unfinished text message. Expected ';' to close your thought, Shakespeare.
-  --> bad_missing_semicolon.splat:1:20
+  --> bad_missing_semicolon.splat:1:18
    |
- 1 | cook f(n::i32)::i32:
-   |                    ^
+ 1 | fn f(n::i32)::i32:
+   |                  ^
   Fix: Add ';' to close the block opened on line 1.
 

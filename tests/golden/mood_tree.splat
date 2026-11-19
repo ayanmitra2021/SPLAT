@@ -1,0 +1,77 @@
+# A recursive enum: an expression tree evaluator, and a generic linked list.
+enum Expr:
+    Num(i32),
+    Add(Expr, Expr),
+    Mul(Expr, Expr),
+    Neg(Expr)
+;
+
+fn eval(e::Expr)::i32:
+    pick e:
+        Num(n) => n,
+        Add(a, b) => eval(a) + eval(b),
+        Mul(a, b) => eval(a) * eval(b),
+        Neg(x) => 0 - eval(x)
+    ;
+;
+
+fn show(e::Expr)::txt:
+    pick e:
+        Num(n) => "{n}",
+        Add(a, b) => "({show(a)} + {show(b)})",
+        Mul(a, b) => "({show(a)} * {show(b)})",
+        Neg(x) => "-{show(x)}"
+    ;
+;
+
+tree := Add(Num(2), Mul(Num(3), Neg(Num(4))))
+print show(tree), "=", eval(tree)
+
+# Constant folding is a pick with nested patterns.
+fn simplify(e::Expr)::Expr:
+    pick e:
+        Add(Num(0), x) => simplify(x),
+        Add(x, Num(0)) => simplify(x),
+        Mul(Num(1), x) => simplify(x),
+        Mul(Num(0), _) => Num(0),
+        Add(a, b) => Add(simplify(a), simplify(b)),
+        Mul(a, b) => Mul(simplify(a), simplify(b)),
+        Neg(Neg(x)) => simplify(x),
+        Neg(x) => Neg(simplify(x)),
+        Num(n) => Num(n)
+    ;
+;
+messy := Add(Mul(Num(1), Num(7)), Neg(Neg(Add(Num(0), Num(5)))))
+print show(messy), "->", show(simplify(messy)), "=", eval(simplify(messy))
+
+# A generic, recursive enum: the type parameter threads through every call.
+enum Chain<T>:
+    End,
+    Link(T, Chain<T>)
+;
+
+fn length<T>(c::Chain<T>)::i32:
+    pick c:
+        End => 0,
+        Link(_, rest) => 1 + length(rest)
+    ;
+;
+
+fn total(c::Chain<i32>)::i32:
+    pick c:
+        End => 0,
+        Link(v, rest) => v + total(rest)
+    ;
+;
+
+fn to_list<T>(c::Chain<T>)::List<T>:
+    pick c:
+        End => [],
+        Link(v, rest) => [v] + to_list(rest)
+    ;
+;
+
+numbers := Link(1, Link(2, Link(3, End)))
+names := Link("ada", Link("alan", End))
+print length(numbers), total(numbers), to_list(numbers)
+print length(names), to_list(names)

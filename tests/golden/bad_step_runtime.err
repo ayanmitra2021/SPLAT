@@ -1,7 +1,7 @@
 [SE00113] 🐌 STEP BROTHER [Line 3]: A step of 0 would never get anywhere. Ranges walk forward in steps of 1 or more.
   --> bad_step_runtime.splat:3:24
    |
- 3 |     spin i in 0..10 by step:
+ 3 |     loop i in 0..10 by step:
    |                        ^^^^
   Fix: Use a step of at least 1 (for example '0..10 by 2'); to count down, wrap the range in 'rev(...)'.
   SPLAT stack trace (most recent call first):

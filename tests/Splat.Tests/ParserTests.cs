@@ -53,11 +53,11 @@ public class ParserStatementTests
 {
     [Theory]
     [InlineData("x := 42", "(bind x 42)")]
-    [InlineData("x::mid = 42.0", "(bind x (: mid) 42.0)")]
-    [InlineData("wag x = 42", "(wag x 42)")]
-    [InlineData("wag x::mid = 42.0", "(wag x (: mid) 42.0)")]
-    [InlineData("A::mid[3, 4] = zeros(3, 4)", "(bind A (: (tensor mid 3 4)) (call zeros 3 4))")]
-    [InlineData("v::mid[$B, ?] = w", "(bind v (: (tensor mid $B ?)) w)")]
+    [InlineData("x::f32 = 42.0", "(bind x (: f32) 42.0)")]
+    [InlineData("var x = 42", "(var x 42)")]
+    [InlineData("var x::f32 = 42.0", "(var x (: f32) 42.0)")]
+    [InlineData("A::f32[3, 4] = zeros(3, 4)", "(bind A (: (tensor f32 3 4)) (call zeros 3 4))")]
+    [InlineData("v::f32[$B, ?] = w", "(bind v (: (tensor f32 $B ?)) w)")]
     [InlineData("r::&txt = s", "(bind r (: (& txt)) s)")]
     public void Bindings(string src, string expected) => Assert.Equal(expected, ParseHelper.Single(src));
 
@@ -75,33 +75,33 @@ public class ParserStatementTests
     public void Assignments(string src, string expected) => Assert.Equal(expected, ParseHelper.Single(src));
 
     [Fact]
-    public void ExpressionBodiedCook() =>
-        Assert.Equal("(cook add (params (a i32) (b i32)) (-> i32) (= (+ a b)))",
-            ParseHelper.Single("cook add(a::i32, b::i32)::i32 = a + b"));
+    public void ExpressionBodiedFn() =>
+        Assert.Equal("(fn add (params (a i32) (b i32)) (-> i32) (= (+ a b)))",
+            ParseHelper.Single("fn add(a::i32, b::i32)::i32 = a + b"));
 
     [Fact]
-    public void BlockBodiedCookWithDefaultsAndNoReturnType() =>
-        Assert.Equal("(cook greet (params (who txt \"you\")) (block (call squish (str \"hi \" (interp who)))))",
-            ParseHelper.Single("cook greet(who::txt = \"you\"):\n    squish \"hi {who}\"\n;"));
+    public void BlockBodiedFnWithDefaultsAndNoReturnType() =>
+        Assert.Equal("(fn greet (params (who txt \"you\")) (block (call print (str \"hi \" (interp who)))))",
+            ParseHelper.Single("fn greet(who::txt = \"you\"):\n    print \"hi {who}\"\n;"));
 
     [Fact]
     public void GenericsAndReceivers() =>
-        Assert.Equal("(cook f (generics T $N U:Quirk) (params &me ~me (x T)) (-> (tensor mid $N)) (= x))",
-            ParseHelper.Single("cook f<T, $N, U: Quirk>(&me, ~me, x::T)::mid[$N] = x"));
+        Assert.Equal("(fn f (generics T $N U:Trait) (params &self ~self (x T)) (-> (tensor f32 $N)) (= x))",
+            ParseHelper.Single("fn f<T, $N, U: Trait>(&self, ~self, x::T)::f32[$N] = x"));
 
     [Fact]
     public void OperatorOverloads()
     {
-        Assert.Equal("(cook op + (params me (o V)) (-> V) (= o))", ParseHelper.Single("cook op +(me, o::V)::V = o"));
-        Assert.Equal("(cook op [] (params me (i usz)) (-> mid) (= 0.0))", ParseHelper.Single("cook op [](me, i::usz)::mid = 0.0"));
+        Assert.Equal("(fn op + (params self (o V)) (-> V) (= o))", ParseHelper.Single("fn op +(self, o::V)::V = o"));
+        Assert.Equal("(fn op [] (params self (i usize)) (-> f32) (= 0.0))", ParseHelper.Single("fn op [](self, i::usize)::f32 = 0.0"));
         // 'op' followed by '(' is just a function with that name.
-        Assert.Equal("(cook op (params (x i32)) (= x))", ParseHelper.Single("cook op(x::i32) = x"));
+        Assert.Equal("(fn op (params (x i32)) (= x))", ParseHelper.Single("fn op(x::i32) = x"));
     }
 
     [Fact]
     public void FunctionTypeParameter() =>
-        Assert.Equal("(cook ap (params (f (cook-type (params i32 i32) i32))) (= f))",
-            ParseHelper.Single("cook ap(f::cook(i32, i32)::i32) = f"));
+        Assert.Equal("(fn ap (params (f (fn-type (params i32 i32) i32))) (= f))",
+            ParseHelper.Single("fn ap(f::fn(i32, i32)::i32) = f"));
 
     [Fact]
     public void ClosingNestedGenericsSplitsGreaterGreater() =>
@@ -109,91 +109,91 @@ public class ParserStatementTests
 
     [Fact]
     public void ClosingGenericsRightBeforeAssignSplitsGreaterEqual() =>
-        Assert.Equal("(wag m (: (Maybe i32)) (call f))", ParseHelper.Single("wag m::Maybe<i32>= f()"));
+        Assert.Equal("(var m (: (Maybe i32)) (call f))", ParseHelper.Single("var m::Maybe<i32>= f()"));
 
     [Fact]
-    public void SpinInAllThreeForms()
+    public void LoopInAllThreeForms()
     {
-        Assert.Equal("(spin-in i (..= 1 15) (block (call squish i)))", ParseHelper.Single("spin i in 1..=15:\n squish i\n;"));
-        Assert.Equal("(spin-while (< n 3) (block (+= n 1)))", ParseHelper.Single("spin while n < 3:\n n += 1\n;"));
-        Assert.Equal("(spin (block (bail)))", ParseHelper.Single("spin:\n bail\n;"));
+        Assert.Equal("(loop-in i (..= 1 15) (block (call print i)))", ParseHelper.Single("loop i in 1..=15:\n print i\n;"));
+        Assert.Equal("(loop-while (< n 3) (block (+= n 1)))", ParseHelper.Single("loop while n < 3:\n n += 1\n;"));
+        Assert.Equal("(loop (block (br)))", ParseHelper.Single("loop:\n br\n;"));
     }
 
     [Fact]
-    public void BailAndSkip() =>
-        Assert.Equal("(spin (block (skip) (bail)))", ParseHelper.Single("spin:\n skip\n bail\n;"));
+    public void BreakAndContinue() =>
+        Assert.Equal("(loop (block (cont) (br)))", ParseHelper.Single("loop:\n cont\n br\n;"));
 
     [Fact]
     public void NestedBlocksEachCloseWithTheirOwnSemicolon()
     {
-        var (p, diag, _) = ParseHelper.Parse("spin:\n spin:\n  bail\n ;\n bail\n;\nx := 1");
+        var (p, diag, _) = ParseHelper.Parse("loop:\n loop:\n  br\n ;\n br\n;\nx := 1");
         Assert.False(diag.HasErrors);
         Assert.Equal(2, p.Statements.Count);
-        var outer = Assert.IsType<SpinStmt>(p.Statements[0]);
+        var outer = Assert.IsType<LoopStmt>(p.Statements[0]);
         Assert.Equal(2, outer.Body.Statements.Count);
     }
 
     [Fact]
     public void DoubleSemicolonClosesTwoBlocks()
     {
-        var (p, diag, _) = ParseHelper.Parse("spin:\n spin:\n  bail\n;;\nx := 1");
+        var (p, diag, _) = ParseHelper.Parse("loop:\n loop:\n  br\n;;\nx := 1");
         Assert.False(diag.HasErrors, ParseHelper.Messages(diag));
         Assert.Equal(2, p.Statements.Count);
-        var outer = Assert.IsType<SpinStmt>(p.Statements[0]);
+        var outer = Assert.IsType<LoopStmt>(p.Statements[0]);
         Assert.Single(outer.Body.Statements);
-        Assert.IsType<SpinStmt>(outer.Body.Statements[0]);
+        Assert.IsType<LoopStmt>(outer.Body.Statements[0]);
         Assert.IsType<BindStmt>(p.Statements[1]);
     }
 
     [Fact]
     public void TripleSemicolonClosesThreeBlocks()
     {
-        var (p, diag, _) = ParseHelper.Parse("cook f():\n spin:\n  spin:\n   bail\n;;;\nx := 1");
+        var (p, diag, _) = ParseHelper.Parse("fn f():\n loop:\n  loop:\n   br\n;;;\nx := 1");
         Assert.False(diag.HasErrors, ParseHelper.Messages(diag));
         Assert.Equal(2, p.Statements.Count);
     }
 
     [Fact]
-    public void HmmChainSharesOneClosingSemicolon()
+    public void IfChainSharesOneClosingSemicolon()
     {
-        var (p, diag, _) = ParseHelper.Parse("hmm a:\n x := 1\nmeh b:\n x := 2\nmeh c:\n x := 3\nnah:\n x := 4\n;\ny := 5");
+        var (p, diag, _) = ParseHelper.Parse("if a:\n x := 1\nelif b:\n x := 2\nelif c:\n x := 3\nel:\n x := 4\n;\ny := 5");
         Assert.False(diag.HasErrors, ParseHelper.Messages(diag));
         Assert.Equal(2, p.Statements.Count);
-        var h = Assert.IsType<HmmStmt>(p.Statements[0]);
+        var h = Assert.IsType<IfStmt>(p.Statements[0]);
         Assert.Equal(3, h.Branches.Count);
         Assert.NotNull(h.Else);
         Assert.IsType<BindStmt>(p.Statements[1]); // 'y' is outside the chain
     }
 
     [Fact]
-    public void HmmWithoutElse() =>
-        Assert.Equal("(hmm (if (> x 0) (block (yeet 1))))", ParseHelper.Single("hmm x > 0:\n yeet 1\n;"));
+    public void IfWithoutElse() =>
+        Assert.Equal("(if (if (> x 0) (block (ret 1))))", ParseHelper.Single("if x > 0:\n ret 1\n;"));
 
     [Fact]
-    public void NestedHmmEachNeedItsOwnCloser()
+    public void NestedIfEachNeedItsOwnCloser()
     {
-        Assert.Equal("(hmm (if a (block (hmm (if b (block (yeet 1))) (else (block (yeet 2)))))))",
-            ParseHelper.Single("hmm a:\n hmm b:\n  yeet 1\n nah:\n  yeet 2\n ;\n;"));
+        Assert.Equal("(if (if a (block (if (if b (block (ret 1))) (else (block (ret 2)))))))",
+            ParseHelper.Single("if a:\n if b:\n  ret 1\n el:\n  ret 2\n ;\n;"));
     }
 
     [Fact]
-    public void InnerHmmTakesTheMehThatFollowsIt()
+    public void InnerIfTakesTheElifThatFollowsIt()
     {
-        // Without an inner ';', 'meh' binds to the inner chain (dangling-else rule); the file then runs out of ';'.
-        var (_, diag, _) = ParseHelper.Parse("hmm a:\n hmm b:\n  x := 1\nmeh c:\n  x := 2\n;");
+        // Without an inner ';', 'elif' binds to the inner chain (dangling-else rule); the file then runs out of ';'.
+        var (_, diag, _) = ParseHelper.Parse("if a:\n if b:\n  x := 1\nelif c:\n  x := 2\n;");
         Assert.Equal([DiagnosticCategory.MissingSemicolon], ParseHelper.Categories(diag));
     }
 
     [Fact]
-    public void YeetWithAndWithoutValue()
+    public void ReturnWithAndWithoutValue()
     {
-        Assert.Equal("(yeet (+ 1 2))", ParseHelper.Single("yeet 1 + 2"));
-        Assert.Equal("(cook f (params) (block (hmm (if yep (block (yeet))))))", ParseHelper.Single("cook f():\n hmm yep:\n  yeet\n ;\n;"));
+        Assert.Equal("(ret (+ 1 2))", ParseHelper.Single("ret 1 + 2"));
+        Assert.Equal("(fn f (params) (block (if (if true (block (ret))))))", ParseHelper.Single("fn f():\n if true:\n  ret\n ;\n;"));
     }
 
     [Fact]
-    public void YeetValueMustStartOnTheSameLine() =>
-        Assert.Equal("(cook f (params) (block (yeet) (bind x 1)))", ParseHelper.Single("cook f():\n yeet\n x := 1\n;"));
+    public void ReturnValueMustStartOnTheSameLine() =>
+        Assert.Equal("(fn f (params) (block (ret) (bind x 1)))", ParseHelper.Single("fn f():\n ret\n x := 1\n;"));
 
     [Fact]
     public void RipPanics()
@@ -205,22 +205,22 @@ public class ParserStatementTests
     [Fact]
     public void CommandCallWithoutParentheses()
     {
-        Assert.Equal("(call squish (str \"Got \" (interp val)))", ParseHelper.Single("squish \"Got {val}\""));
-        Assert.Equal("(call squish a b (+ c 1))", ParseHelper.Single("squish a, b, c + 1"));
-        Assert.Equal("(call yell \"bad\")", ParseHelper.Single("yell \"bad\""));
-        Assert.Equal("(bind name (call slurp \"name? \"))", ParseHelper.Single("name := slurp(\"name? \")"));
+        Assert.Equal("(call print (str \"Got \" (interp val)))", ParseHelper.Single("print \"Got {val}\""));
+        Assert.Equal("(call print a b (+ c 1))", ParseHelper.Single("print a, b, c + 1"));
+        Assert.Equal("(call eprint \"bad\")", ParseHelper.Single("eprint \"bad\""));
+        Assert.Equal("(bind name (call readl \"name? \"))", ParseHelper.Single("name := readl(\"name? \")"));
     }
 
     [Fact]
     public void ParenthesisedCallsAlwaysWork()
     {
-        Assert.Equal("(call squish \"hi\")", ParseHelper.Single("squish(\"hi\")"));
-        Assert.Equal("(call squish \"hi\")", ParseHelper.Single("squish (\"hi\")"));
+        Assert.Equal("(call print \"hi\")", ParseHelper.Single("print(\"hi\")"));
+        Assert.Equal("(call print \"hi\")", ParseHelper.Single("print (\"hi\")"));
     }
 
     [Fact]
     public void CommandCallArgumentMustBeOnTheSameLine() =>
-        Assert.Equal(["squish", "(bind x 1)"], ParseHelper.Statements("squish\nx := 1"));
+        Assert.Equal(["print", "(bind x 1)"], ParseHelper.Statements("print\nx := 1"));
 
     [Fact]
     public void OnlyPreludeNamesTakeCommandForm() =>
@@ -243,13 +243,13 @@ public class ParserStatementTests
 
     [Fact]
     public void NestedInterpolationAndStringsInsideBraces() =>
-        Assert.Equal("(call squish (str \"[\" (interp (call f (str \"n \" (interp name)))) \"]\"))",
-            ParseHelper.Single("squish \"[{f(\"n {name}\")}]\""));
+        Assert.Equal("(call print (str \"[\" (interp (call f (str \"n \" (interp name)))) \"]\"))",
+            ParseHelper.Single("print \"[{f(\"n {name}\")}]\""));
 
     [Fact]
     public void ConstructsOfLaterMilestonesAreSkippedWithoutDerailingTheParse()
     {
-        var src = "mold Dog from Animal with Talkable:\n cook bark(me):\n  hmm a:\n   x := 1\n  meh b:\n   x := 2\n  ;\n ;\n;\nafter := 1";
+        var src = "class Dog from Animal with Talkable:\n fn bark(self):\n  if a:\n   x := 1\n  elif b:\n   x := 2\n  ;\n ;\n;\nafter := 1";
         var (p, diag, _) = ParseHelper.Parse(src);
         Assert.Equal([DiagnosticCategory.NotYetBuilt], ParseHelper.Categories(diag));
         Assert.Equal(2, p.Statements.Count);
@@ -258,9 +258,9 @@ public class ParserStatementTests
     }
 
     [Fact]
-    public void ReservedConstructWithQuirkBoundInGenerics()
+    public void ReservedConstructWithTraitBoundInGenerics()
     {
-        var (p, diag, _) = ParseHelper.Parse("brain Net<$In, T: Quirk>:\n lin(In, 4)\n;\nok := 1");
+        var (p, diag, _) = ParseHelper.Parse("network Net<$In, T: Trait>:\n lin(In, 4)\n;\nok := 1");
         Assert.Equal([DiagnosticCategory.NotYetBuilt], ParseHelper.Categories(diag));
         Assert.Equal(2, p.Statements.Count);
     }
@@ -268,7 +268,7 @@ public class ParserStatementTests
     [Fact]
     public void ReservedLineStatementsSkipOnlyTheirLine()
     {
-        var (p, diag, _) = ParseHelper.Parse("nuke x\ny := 1");
+        var (p, diag, _) = ParseHelper.Parse("drop x\ny := 1");
         Assert.Single(diag.Diagnostics);
         Assert.Equal(2, p.Statements.Count);
     }
@@ -296,11 +296,11 @@ public class ParserErrorTests
     [Fact]
     public void EndOfFileInsideABlockIsOofAtTheOpeningColon()
     {
-        var (_, diag, _) = ParseHelper.Parse("cook f(n::i32)::i32:\n    yeet n\n");
+        var (_, diag, _) = ParseHelper.Parse("fn f(n::i32)::i32:\n    ret n\n");
         var d = Assert.Single(diag.Diagnostics);
         Assert.Equal(DiagnosticCategory.MissingSemicolon, d.Category);
         Assert.Equal(1, d.Span.Line);
-        Assert.Equal(20, d.Span.Col);
+        Assert.Equal(18, d.Span.Col);
         Assert.Equal(1, d.Span.Length);
         Assert.Contains("💀 OOF [Line 1]", d.Message);
     }
@@ -308,15 +308,15 @@ public class ParserErrorTests
     [Fact]
     public void EveryUnclosedNestedBlockIsReported()
     {
-        var (_, diag, _) = ParseHelper.Parse("spin:\n    spin:\n        bail\n");
+        var (_, diag, _) = ParseHelper.Parse("loop:\n    loop:\n        br\n");
         Assert.Equal([DiagnosticCategory.MissingSemicolon, DiagnosticCategory.MissingSemicolon], ParseHelper.Categories(diag));
         Assert.Equal([2, 1], diag.Diagnostics.Select(d => d.Span.Line).ToArray()); // innermost first
     }
 
     [Fact]
-    public void UnclosedHmmChainPointsAtTheLastOpenBranch()
+    public void UnclosedIfChainPointsAtTheLastOpenBranch()
     {
-        var (_, diag, _) = ParseHelper.Parse("hmm a:\n x := 1\nnah:\n x := 2\n");
+        var (_, diag, _) = ParseHelper.Parse("if a:\n x := 1\nel:\n x := 2\n");
         var d = Assert.Single(diag.Diagnostics);
         Assert.Equal(DiagnosticCategory.MissingSemicolon, d.Category);
         Assert.Equal(3, d.Span.Line);
@@ -331,28 +331,28 @@ public class ParserErrorTests
     }
 
     [Fact]
-    public void OrphanMehIsReportedOnceWithoutCascade()
+    public void OrphanElifIsReportedOnceWithoutCascade()
     {
-        var (p, diag, _) = ParseHelper.Parse("meh x > 1:\n    squish \"hi\"\n;\ny := 2");
+        var (p, diag, _) = ParseHelper.Parse("elif x > 1:\n    print \"hi\"\n;\ny := 2");
         Assert.Equal([DiagnosticCategory.OrphanBranch], ParseHelper.Categories(diag));
         Assert.IsType<BindStmt>(p.Statements[^1]);
     }
 
     [Fact]
-    public void MissingColonAfterHmmConditionStillParsesTheBody()
+    public void MissingColonAfterIfConditionStillParsesTheBody()
     {
-        var (p, diag, _) = ParseHelper.Parse("hmm x\n squish \"a\"\n;\ny := 1");
+        var (p, diag, _) = ParseHelper.Parse("if x\n print \"a\"\n;\ny := 1");
         var d = Assert.Single(diag.Diagnostics);
         Assert.Equal(DiagnosticCategory.UnexpectedToken, d.Category);
         Assert.Equal(2, p.Statements.Count);
     }
 
     [Fact]
-    public void WagWithColonAssignGetsATargetedMessage()
+    public void VarWithColonAssignGetsATargetedMessage()
     {
-        var (_, diag, _) = ParseHelper.Parse("wag x := 1");
+        var (_, diag, _) = ParseHelper.Parse("var x := 1");
         var d = Assert.Single(diag.Diagnostics);
-        Assert.Contains("'wag' variables use '='", d.Message);
+        Assert.Contains("'var' variables use '='", d.Message);
     }
 
     [Fact]
@@ -385,9 +385,9 @@ public class ParserErrorTests
     }
 
     [Fact]
-    public void CookWithoutBody()
+    public void FnWithoutBody()
     {
-        var (_, diag, _) = ParseHelper.Parse("cook f(x::i32)::i32\ny := 1");
+        var (_, diag, _) = ParseHelper.Parse("fn f(x::i32)::i32\ny := 1");
         var d = Assert.Single(diag.Diagnostics);
         Assert.Contains("body of 'f'", d.Message + d.Fix);
     }
@@ -395,14 +395,14 @@ public class ParserErrorTests
     [Fact]
     public void ParameterWithoutType()
     {
-        var (_, diag, _) = ParseHelper.Parse("cook f(x) = x");
+        var (_, diag, _) = ParseHelper.Parse("fn f(x) = x");
         Assert.Contains("'::Type' after parameter 'x'", diag.Diagnostics[0].Message);
     }
 
     [Fact]
-    public void BadSpinHeader()
+    public void BadLoopHeader()
     {
-        var (_, diag, _) = ParseHelper.Parse("spin 5:\n bail\n;");
+        var (_, diag, _) = ParseHelper.Parse("loop 5:\n br\n;");
         Assert.True(diag.HasErrors);
     }
 
@@ -416,7 +416,7 @@ public class ParserErrorTests
     [Fact]
     public void SeveralErrorsSurfaceInOneRun()
     {
-        var src = "a := + 1\nb := 2\nc := (3\nd := 4\nmeh d > 1:\n;\nspin:\n bail\n";
+        var src = "a := + 1\nb := 2\nc := (3\nd := 4\nelif d > 1:\n;\nloop:\n br\n";
         var (p, diag, _) = ParseHelper.Parse(src);
         Assert.True(diag.ErrorCount >= 4, ParseHelper.Messages(diag));
         // Recovery kept the good statement between the errors.
@@ -436,7 +436,7 @@ public class ParserErrorTests
         var (_, diag, _) = ParseHelper.Parse("x := " + new string('(', 5000) + "1" + new string(')', 5000));
         Assert.Contains(DiagnosticCategory.TooDeep, ParseHelper.Categories(diag));
 
-        var (_, diag2, _) = ParseHelper.Parse(string.Concat(Enumerable.Repeat("spin:\n", 3000)));
+        var (_, diag2, _) = ParseHelper.Parse(string.Concat(Enumerable.Repeat("loop:\n", 3000)));
         Assert.Contains(DiagnosticCategory.TooDeep, ParseHelper.Categories(diag2));
     }
 
@@ -451,7 +451,7 @@ public class ParserErrorTests
     public void ParserNeverThrowsOnGarbage()
     {
         var rng = new Random(1234);
-        string[] pieces = [":", ";", ";;", "hmm", "meh", "nah", "spin", "cook", "(", ")", "[", "]", "x", "1", "\"s{", "}", "::", ":=", "=", "yeet", "wag", "|", "'", ",", "mold", "pick", ".", "..", "@", "->"];
+        string[] pieces = [":", ";", ";;", "if", "elif", "el", "loop", "fn", "(", ")", "[", "]", "x", "1", "\"s{", "}", "::", ":=", "=", "ret", "var", "|", "'", ",", "class", "pick", ".", "..", "@", "->"];
         for (int i = 0; i < 400; i++)
         {
             var text = string.Join(" ", Enumerable.Range(0, rng.Next(1, 30)).Select(_ => pieces[rng.Next(pieces.Length)]));
@@ -499,7 +499,7 @@ public class ParserExpressionTests
     [InlineData("()", "()")]
     [InlineData("[1, 2, 3]", "(list 1 2 3)")]
     [InlineData("[[1, 2], [3, 4]]", "(list (list 1 2) (list 3 4))")]
-    [InlineData("yep and nop", "(and yep nop)")]
+    [InlineData("true and false", "(and true false)")]
     [InlineData("c\"a\"", "c\"a\"")]
     [InlineData("a % b == 0", "(== (% a b) 0)")]
     [InlineData("a >> b", "(>> a b)")]
@@ -543,9 +543,9 @@ public class ParserRoundTripTests
     [InlineData("c := c\"\\n\" + c\"x\"")]
     [InlineData("f := 3.0 + 1e-4 + 2.5e10 + 0xFF + 0b101 + 1_000")]
     [InlineData("A[:, 1] = B[0, :]")]
-    [InlineData("cook f<T: Q, $N>(&me, ~me, x::mid[$N, ?] = zeros(3), g::cook(T)::T)::Maybe<Maybe<T>> = x")]
-    [InlineData("hmm a:\n    hmm b:\n        yeet 1\n    nah:\n        yeet 2\n    ;\nmeh c:\n    bail\n;")]
-    [InlineData("cook op ==(me, o::V)::bit = yep\ncook op <(me, o::V)::bit = nop\ncook op [](me, i::usz)::mid = 0.0")]
+    [InlineData("fn f<T: Q, $N>(&self, ~self, x::f32[$N, ?] = zeros(3), g::fn(T)::T)::Maybe<Maybe<T>> = x")]
+    [InlineData("if a:\n    if b:\n        ret 1\n    el:\n        ret 2\n    ;\nelif c:\n    br\n;")]
+    [InlineData("fn op ==(self, o::V)::bool = true\nfn op <(self, o::V)::bool = false\nfn op [](self, i::usize)::f32 = 0.0")]
     public void ExpressionAndDeclarationRoundTrips(string text) => AssertRoundTrips(text);
 }
 

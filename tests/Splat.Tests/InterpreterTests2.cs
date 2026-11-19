@@ -9,13 +9,13 @@ public class PipeTests
     public void PipeInsertsTheLeftSideAsTheFirstArgument()
     {
         const string prog = @"
-cook double(x::i32)::i32 = x * 2
-cook add(a::i32, b::i32)::i32 = a + b
-cook sub(a::i32, b::i32)::i32 = a - b
-squish 3 |> double |> double
-squish 10 |> sub(4)
-squish 1 |> add(2) |> double
-squish 5 |> |v| v + 1";
+fn double(x::i32)::i32 = x * 2
+fn add(a::i32, b::i32)::i32 = a + b
+fn sub(a::i32, b::i32)::i32 = a - b
+print 3 |> double |> double
+print 10 |> sub(4)
+print 1 |> add(2) |> double
+print 5 |> |v| v + 1";
         Assert.Equal("12\n6\n6\n6\n", RunHelper.Ok(prog));
     }
 
@@ -25,7 +25,7 @@ squish 5 |> |v| v + 1";
 
     [Fact]
     public void PipeChecksArgumentTypes() =>
-        Assert.Equal([DiagnosticCategory.TypeMismatch], RunHelper.CompileErrors("cook f(x::i32)::i32 = x\ny := \"s\" |> f"));
+        Assert.Equal([DiagnosticCategory.TypeMismatch], RunHelper.CompileErrors("fn f(x::i32)::i32 = x\ny := \"s\" |> f"));
 }
 
 public class TemplateAndPreludeTests
@@ -40,16 +40,16 @@ public class TemplateAndPreludeTests
     [InlineData("\"[{0 - 42:06}]\"", "[-00042]")]
     [InlineData("\"{255:x} {255:X} {5:b} {8:o}\"", "ff FF 101 10")]
     [InlineData("\"[{1.5:8.2}]\"", "[    1.50]")]
-    [InlineData("\"{yep} {nop} {()}\"", "yep nop ()")]
+    [InlineData("\"{true} {false} {()}\"", "true false ()")]
     [InlineData("\"{1 + 2}-{3 * 3}\"", "3-9")]
     public void FormatSpecs(string expr, string expected) => Assert.Equal(expected, RunHelper.Eval(expr));
 
     [Fact]
     public void TextAndCharFormatting()
     {
-        Assert.Equal("[ab   ]", RunHelper.Ok("s := \"ab\"\nsquish \"[{s:5}]\"").Trim());
-        Assert.Equal("[   ab]", RunHelper.Ok("s := \"ab\"\nsquish \"[{s:>5}]\"").Trim());
-        Assert.Equal("z", RunHelper.Ok("c := c\"z\"\nsquish \"{c}\"").Trim());
+        Assert.Equal("[ab   ]", RunHelper.Ok("s := \"ab\"\nprint \"[{s:5}]\"").Trim());
+        Assert.Equal("[   ab]", RunHelper.Ok("s := \"ab\"\nprint \"[{s:>5}]\"").Trim());
+        Assert.Equal("z", RunHelper.Ok("c := c\"z\"\nprint \"{c}\"").Trim());
     }
 
     [Fact]
@@ -65,21 +65,21 @@ public class TemplateAndPreludeTests
 
     [Fact]
     public void UndefinedNameInsideATemplateIsReported() =>
-        Assert.Equal([DiagnosticCategory.UndefinedName], RunHelper.CompileErrors("squish \"hi {nobody}\""));
+        Assert.Equal([DiagnosticCategory.UndefinedName], RunHelper.CompileErrors("print \"hi {nobody}\""));
 
     [Fact]
-    public void SquishJoinsArgumentsWithSpacesAndYellGoesToStderr()
+    public void PrintJoinsArgumentsWithSpacesAndYellGoesToStderr()
     {
-        var r = RunHelper.Run("squish 1, \"two\", 3.5, yep\nyell \"oops\"\nsquish()");
+        var r = RunHelper.Run("print 1, \"two\", 3.5, true\neprint \"catch\"\nprint()");
         Assert.Equal(RunOutcome.Ok, r.Outcome);
-        Assert.Equal("1 two 3.5 yep\n\n", r.Out);
-        Assert.Equal("oops\n", r.Err);
+        Assert.Equal("1 two 3.5 true\n\n", r.Out);
+        Assert.Equal("catch\n", r.Err);
     }
 
     [Fact]
     public void RipPanicsWithTheMessage()
     {
-        var r = RunHelper.RuntimeError("squish \"a\"\nrip \"boom {1 + 1}\"\nsquish \"b\"");
+        var r = RunHelper.RuntimeError("print \"a\"\nrip \"boom {1 + 1}\"\nprint \"b\"");
         Assert.Equal("a\n", r.Out);
         var d = Assert.Single(r.Diag.Diagnostics);
         Assert.Equal(DiagnosticCategory.Panic, d.Category);
@@ -93,7 +93,7 @@ public class TemplateAndPreludeTests
     [Fact]
     public void NotYetBuiltConstructsAreReportedAsHardHatErrors()
     {
-        var cats = RunHelper.CompileErrors("x := [1, 2]\ny := x[0]\nz := 1 @ 2");
+        var cats = RunHelper.CompileErrors("z := 1 @ 2\nf := upper\nw := 1.0 .* 2.0");
         Assert.All(cats, c => Assert.Equal(DiagnosticCategory.NotYetBuilt, c));
         Assert.Equal(3, cats.Length);
     }
@@ -194,6 +194,16 @@ public class CliRunTests
     public void RuntimeErrorExits70() => Assert.Equal(70, Cli("run", Golden("bad_runtime_div.splat")).Code);
 
     [Fact]
+    public void WarningsAreShownOnStderrWhenTheProgramStillRuns()
+    {
+        var (code, so, se) = Cli("run", Golden("warn_unreachable.splat"));
+        Assert.Equal(0, code);
+        Assert.Equal("small big\n", so);
+        Assert.Contains("SW00400", se);
+        Assert.Contains("DEAD END", se);
+    }
+
+    [Fact]
     public void CheckReportsDiagnosticsWithoutRunning()
     {
         var (ok, o, _) = Cli("check", Golden("fizzbuzz.splat"));
@@ -218,33 +228,33 @@ public class AnnotatedLambdaParserTests
     [Fact]
     public void AnnotatedLambdaRoundTripsThroughTheFormatter()
     {
-        var (p, diag, _) = ParseHelper.Parse("f := |x::i64, y::mid| x\n");
+        var (p, diag, _) = ParseHelper.Parse("f := |x::i64, y::f32| x\n");
         Assert.False(diag.HasErrors);
         var text = Splat.Syntax.SourceFormatter.Format(p);
-        Assert.Contains("|x::i64, y::mid|", text);
+        Assert.Contains("|x::i64, y::f32|", text);
     }
 }
 
 public class TextIterationTests
 {
     [Fact]
-    public void SpinOverTxtYieldsChars()
+    public void LoopOverTxtYieldsChars()
     {
         const string prog = @"
-cook count_vowels(text::txt)::i32:
-    wag n::i32 = 0
-    spin c in text:
-        hmm c == c""a"" or c == c""e"" or c == c""i"" or c == c""o"" or c == c""u"":
+fn count_vowels(text::txt)::i32:
+    var n::i32 = 0
+    loop c in text:
+        if c == c""a"" or c == c""e"" or c == c""i"" or c == c""o"" or c == c""u"":
             n += 1
         ;
     ;
     n
 ;
-squish count_vowels(""hello its haloween!""), count_vowels(""""), count_vowels(""rhythm"")";
+print count_vowels(""hello its haloween!""), count_vowels(""""), count_vowels(""rhythm"")";
         Assert.Equal("7 0 0\n", RunHelper.Ok(prog));
     }
 
     [Fact]
     public void ComparingACharWithATxtIsStillAnError() =>
-        Assert.NotEmpty(RunHelper.CompileErrors("spin c in \"ab\":\n    hmm c == \"a\":\n        bail\n    ;\n;"));
+        Assert.NotEmpty(RunHelper.CompileErrors("loop c in \"ab\":\n    if c == \"a\":\n        br\n    ;\n;"));
 }

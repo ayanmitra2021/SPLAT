@@ -3,20 +3,20 @@
    |
  1 | y := undefined_thing + 1
    |      ^^^^^^^^^^^^^^^
-  Fix: Declare 'undefined_thing' with ':=' or 'wag' before using it, or check the spelling.
+  Fix: Declare 'undefined_thing' with ':=' or 'var' before using it, or check the spelling.
 
 [SE00300] 🕳️ BLACK HOLE [Line 4]: Divided by zero. Mathematicians are screaming.
-  --> <repl>:4:16
+  --> <repl>:4:15
    |
- 4 |         squish 1 / (i - 1)
-   |                ^^^^^^^^^^
+ 4 |         print 1 / (i - 1)
+   |               ^^^^^^^^^^
   Fix: Check the divisor is non-zero before dividing.
 
 [SE00300] 🕳️ BLACK HOLE [Line 4]: Divided by zero. Mathematicians are screaming.
-  --> <repl>:4:12
+  --> <repl>:4:11
    |
- 4 |     squish 1 / 0
-   |            ^^^^^
+ 4 |     print 1 / 0
+   |           ^^^^^
   Fix: Check the divisor is non-zero before dividing.
 
 [SE00012] 🎛️ BUTTON NOT FOUND [REPL]: ':foo' is not one of my commands. I have a short menu.
@@ -27,5 +27,5 @@
    |
  1 | x
    | ^
-  Fix: Declare 'x' with ':=' or 'wag' before using it, or check the spelling.
+  Fix: Declare 'x' with ':=' or 'var' before using it, or check the spelling.
 

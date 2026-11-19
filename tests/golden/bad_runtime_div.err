@@ -1,9 +1,9 @@
 [SE00300] 🕳️ BLACK HOLE [Line 1]: Divided by zero. Mathematicians are screaming.
-  --> bad_runtime_div.splat:1:35
+  --> bad_runtime_div.splat:1:33
    |
- 1 | cook ratio(a::i32, b::i32)::i32 = a / b
-   |                                   ^^^^^
+ 1 | fn ratio(a::i32, b::i32)::i32 = a / b
+   |                                 ^^^^^
   Fix: Check the divisor is non-zero before dividing.
   SPLAT stack trace (most recent call first):
-    at ratio  (called at bad_runtime_div.splat:3:8)
+    at ratio  (called at bad_runtime_div.splat:3:7)
 

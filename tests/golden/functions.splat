@@ -1,16 +1,16 @@
 # Generics, defaults, higher-order types, peek/poke params, pipes, member and index calls
-cook apply<T>(f::cook(T)::T, v::T)::T = f(v)
-cook norm_all<$R, $C>(m::mid[$R, $C], k::Maybe<Maybe<i32>>)::mid[?, 3] = m
-cook scale(me, by::mid = 1.5)::mid:
-    yeet by
+fn apply<T>(f::fn(T)::T, v::T)::T = f(v)
+fn norm_all<$R, $C>(m::f32[$R, $C], k::Maybe<Maybe<i32>>)::f32[?, 3] = m
+fn scale(self, by::f32 = 1.5)::f32:
+    ret by
 ;
-cook peek_it(&me)::zip = ()
-cook poke_it(~me)::zip = ()
-cook op +(me, other::Vec2)::Vec2 = other
-cook op [](me, i::usz)::mid = 0.0
+fn peek_it(&self)::unit = ()
+fn poke_it(~self)::unit = ()
+fn op +(self, other::Vec2)::Vec2 = other
+fn op [](self, i::usize)::f32 = 0.0
 
 r := 3 |> double |> add_one
 a := A[:, 0..3]
 b := obj.items[0].name
 c := -2 ** 2
-wag m::Maybe<i32>= f()
+var m::Maybe<i32>= f()

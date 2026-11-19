@@ -1,7 +1,7 @@
 # The step is only known at run time here, so the check happens when the range is built.
-cook walk(step::i32):
-    spin i in 0..10 by step:
-        squish i
+fn walk(step::i32):
+    loop i in 0..10 by step:
+        print i
     ;
 ;
 walk(5)

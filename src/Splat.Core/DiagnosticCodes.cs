@@ -11,7 +11,7 @@ namespace Splat.Core;
 /// free number in the right block, and add the factory to <c>Templates</c>. <c>DiagnosticCodeTests</c> fails if a category
 /// has no entry, a number is reused, or a template's severity disagrees with its code prefix.
 /// </para>
-/// Number blocks (errors): 00001-00099 lexing/parsing, 00100-00199 names/types/shapes, 00200-00299 ownership/zones,
+/// Number blocks (errors): 00001-00099 lexing/parsing, 00100-00199 names/types/shapes, 00200-00299 ownership/arenas,
 /// 00300-00399 runtime, 00400-00499 OOP/patterns (Milestone 2), 01000-01999 data engine (Milestone 5), 90000+ internal.
 /// Warnings use the same blocks in their own SW sequence.
 /// </summary>
@@ -44,15 +44,15 @@ public static class DiagnosticCodes
         [DiagnosticCategory.BadOperator] = new(Severity.Error, 106),
         [DiagnosticCategory.Redeclared] = new(Severity.Error, 107),
         [DiagnosticCategory.LoopControlOutside] = new(Severity.Error, 108),
-        [DiagnosticCategory.YeetOutside] = new(Severity.Error, 109),
+        [DiagnosticCategory.ReturnOutside] = new(Severity.Error, 109),
         [DiagnosticCategory.MissingReturn] = new(Severity.Error, 110),
         [DiagnosticCategory.BadFormat] = new(Severity.Error, 111),
         [DiagnosticCategory.CannotInfer] = new(Severity.Error, 112),
         [DiagnosticCategory.BadStep] = new(Severity.Error, 113),
         [DiagnosticCategory.ChainMismatch] = new(Severity.Error, 114),
-        // ownership and zones
+        // ownership and arenas
         [DiagnosticCategory.UseAfterMove] = new(Severity.Error, 200),
-        [DiagnosticCategory.ZoneEscape] = new(Severity.Error, 201),
+        [DiagnosticCategory.ArenaEscape] = new(Severity.Error, 201),
         // runtime
         [DiagnosticCategory.DivideByZero] = new(Severity.Error, 300),
         [DiagnosticCategory.StackOverflow] = new(Severity.Error, 301),
@@ -64,6 +64,18 @@ public static class DiagnosticCodes
         [DiagnosticCategory.MathDomain] = new(Severity.Error, 307),
         // internal compiler faults
         [DiagnosticCategory.Internal] = new(Severity.Error, 90001),
+        // Phase 7: OOP / ADTs / patterns (errors SE00400–SE00406)
+        [DiagnosticCategory.NonExhaustivePick] = new(Severity.Error, 400),
+        [DiagnosticCategory.VariantNotFound] = new(Severity.Error, 401),
+        [DiagnosticCategory.WrongVariantArity] = new(Severity.Error, 402),
+        [DiagnosticCategory.IndexOutOfRange] = new(Severity.Error, 403),
+        [DiagnosticCategory.ImmutableMutation] = new(Severity.Error, 404),
+        [DiagnosticCategory.MutateWhileIterating] = new(Severity.Error, 405),
+        [DiagnosticCategory.NotHashable] = new(Severity.Error, 406),
+        [DiagnosticCategory.BadTypeArgs] = new(Severity.Error, 115),
+        [DiagnosticCategory.KeyNotFound] = new(Severity.Error, 308),
+        // Phase 7: warnings (SW00400)
+        [DiagnosticCategory.UnreachableArm] = new(Severity.Warning, 400),
     };
 
     public static IReadOnlyDictionary<DiagnosticCategory, Entry> All => Table;
