@@ -30,8 +30,6 @@ public static class Prelude
         ["delete"] = new([Types.Txt], Types.Unit),
         ["open"] = new([Types.Txt, Types.Txt], Types.FileT),
         ["load_json"] = new([Types.Txt], Types.JsonT),
-        ["load_csv"] = new([Types.Txt], new ListSType(new ListSType(Types.F32))),
-        ["save_csv"] = new([Types.Txt, new ListSType(new ListSType(Types.F32))], Types.Unit),
         ["now"] = new([], Types.StampT),
         ["today"] = new([], Types.DateT),
         ["clock"] = new([], Types.TimeT),
@@ -55,5 +53,17 @@ public static class Prelude
     public static readonly IReadOnlySet<string> Special = new HashSet<string>(StringComparer.Ordinal)
         { "readl", "rev", "len", "enumerate", "zip", "set", "map", "to_json" };
 
-    public static bool IsBuiltin(string name) => Printers.Contains(name) || Fixed.ContainsKey(name) || Special.Contains(name);
+    /// <summary>
+    /// Milestone 3: tensor constructors, the math prelude, reductions and CSV. Their types depend on their arguments (and on the
+    /// expected type), so each has bespoke checking in <c>TypeChecker.Tensors.cs</c>. <c>sum</c> and <c>prod</c> here are the
+    /// FUNCTIONS; the bracket forms <c>sum[...]</c> / <c>∑[...]</c> are always the reductions.
+    /// </summary>
+    public static readonly IReadOnlySet<string> Tensor = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "zeros", "ones", "eye", "rand", "arange", "linspace", "reshape", "seed",
+        "sqrt", "exp", "ln", "sin", "cos", "tan", "tanh", "erf", "floor", "ceil", "abs", "pow", "min", "max",
+        "sum", "prod", "mean", "argmax", "argmin", "load_csv", "save_csv",
+    };
+
+    public static bool IsBuiltin(string name) => Printers.Contains(name) || Fixed.ContainsKey(name) || Special.Contains(name) || Tensor.Contains(name);
 }

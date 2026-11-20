@@ -1,0 +1,4 @@
+# Phase 14: a divergent integrand never converges.
+print "integrating..."
+r::f64 = ∫[0.0..1.0] |x| 1.0 / x
+print r

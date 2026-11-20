@@ -265,8 +265,8 @@ public class TraitAndExtendTests
             "extend txt:\n fn d(self)::txt = self\n;\nextend txt:\n fn d(self)::txt = self\n;"));
 
     [Fact]
-    public void ExtendOnATensorPatternParsesButIsNotBoundYet() =>
-        Assert.Contains(DiagnosticCategory.NotYetBuilt, RunHelper.CompileErrors("extend f32[$R, $C]:\n fn f(self)::i32 = 1\n;"));
+    public void ExtendOnATensorPatternIsAcceptedNow() =>
+        Assert.Equal("1\n", RunHelper.Ok("extend f32[$R, $C]:\n fn f(self)::i32 = 1\n;\nA::f32[2, 2] = zeros(2, 2)\nprint A.f()"));
 
     [Fact]
     public void ClassesAndExtendsPersistAcrossReplEntries()
@@ -476,12 +476,12 @@ public class FileAndDataTests
         Assert.Equal(DiagnosticCategory.KeyNotFound, RunHelper.RuntimeError("j := load_json(\"\\{\\}\")\nprint j[\"x\"]").Categories.Single());
 
     [Fact]
-    public void CsvRoundTripOfF32Rows()
+    public void CsvRoundTripOfF32Matrix()
     {
         var p = Tmp(".csv");
         try
         {
-            Assert.Equal("[[1.0, 2.5], [3.0, 4.0]]\n", RunHelper.Ok($"save_csv(\"{p}\", [[1.0, 2.5], [3.0, 4.0]])\nprint load_csv(\"{p}\")"));
+            Assert.Equal("[[1.0, 2.5],\n [3.0, 4.0]]\n", RunHelper.Ok($"save_csv(\"{p}\", [[1.0, 2.5], [3.0, 4.0]])\nprint load_csv(\"{p}\")"));
             File.WriteAllText(p, "a,b\n1,2\n");
             Assert.Equal("[[1.0, 2.0]]\n", RunHelper.Ok($"print load_csv(\"{p}\")"));
         }

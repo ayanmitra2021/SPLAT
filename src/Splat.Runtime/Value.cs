@@ -13,6 +13,8 @@ public enum VKind : byte
     List, Set, Map, Tuple, Enum,
     // Phases 8-10: class instances and native handles, and the date/time family (payload in Bits).
     Object, Date, Time, Stamp, Dur, Cal,
+    // Milestone 3: a tensor (or a view of one); the payload is a <see cref="Tensor"/>.
+    Tensor,
 }
 
 /// <summary>
@@ -44,6 +46,7 @@ public readonly struct Value
     public static Value Tuple(Value[] items) => new(VKind.Tuple, 0, items);
     public static Value Enum(EnumValue ev) => new(VKind.Enum, 0, ev);
     public static Value Obj(HeapObj o) => new(VKind.Object, 0, o);
+    public static Value OfTensor(Tensor t) => new(VKind.Tensor, 0, t);
     /// <summary>A date/time value: Date = days since 1970-01-01, Time = ns since midnight, Stamp = UTC ns, Dur = ns, Cal = months.</summary>
     public static Value Temporal(VKind kind, long bits) => new(kind, bits, null);
 
@@ -68,6 +71,7 @@ public readonly struct Value
     public Value[] AsTuple => (Value[])Ref!;
     public EnumValue AsEnum => (EnumValue)Ref!;
     public HeapObj AsObj => (HeapObj)Ref!;
+    public Tensor AsTensor => (Tensor)Ref!;
 
     public bool IsTemporal => Kind is VKind.Date or VKind.Time or VKind.Stamp or VKind.Dur or VKind.Cal;
 
@@ -92,6 +96,7 @@ public readonly struct Value
         VKind.Tuple => "tuple",
         VKind.Enum => AsEnum.EnumName,
         VKind.Object => AsObj.TypeName,
+        VKind.Tensor => AsTensor.BaseKey,
         VKind.Date => "Date", VKind.Time => "Time", VKind.Stamp => "Stamp", VKind.Dur => "Dur", VKind.Cal => "Cal",
         _ => Types.Of((Prim)(int)Kind).Name,
     };
@@ -284,6 +289,7 @@ public static class Formatter
         VKind.Func => "<fn>",
         VKind.Chain => string.Join(" then ", v.AsChain.Select(Display)),
         VKind.Object => v.AsObj.Display(),
+        VKind.Tensor => TensorFormat.Display(v.AsTensor, null),
         VKind.Date => Temporal.LocaleDate(v.Bits, Temporal.Locale.Default),
         VKind.Time => Temporal.IsoTime(v.Bits),
         VKind.Stamp => Temporal.LocaleStamp(v.Bits, Temporal.Locale.Default),
@@ -318,7 +324,7 @@ public static class Formatter
         _ => Display(v),
     };
 
-    private static string FloatText(VKind kind, double d)
+    internal static string FloatText(VKind kind, double d)
     {
         if (double.IsNaN(d)) return "NaN";
         if (double.IsPositiveInfinity(d)) return "inf";
@@ -361,6 +367,7 @@ public static class Formatter
     public static string Format(Value v, FormatSpec spec)
     {
         string body;
+        if (v.Kind == VKind.Tensor) return TensorFormat.Display(v.AsTensor, spec);
         if (v.IsFloat && spec.Precision is int prec)
         {
             double d = v.AsDouble;

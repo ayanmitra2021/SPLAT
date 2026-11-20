@@ -93,9 +93,9 @@ public class TemplateAndPreludeTests
     [Fact]
     public void NotYetBuiltConstructsAreReportedAsHardHatErrors()
     {
-        var cats = RunHelper.CompileErrors("z := 1 @ 2\nf := upper\nw := 1.0 .* 2.0");
-        Assert.All(cats, c => Assert.Equal(DiagnosticCategory.NotYetBuilt, c));
-        Assert.Equal(3, cats.Length);
+        // Tensor operators are built now: on plain numbers they are ordinary operator errors, not hard hats.
+        Assert.Equal([DiagnosticCategory.BadOperator, DiagnosticCategory.NotYetBuilt, DiagnosticCategory.BadOperator],
+            RunHelper.CompileErrors("z := 1 @ 2\nf := upper\nw := 1.0 .* 2.0"));
     }
 }
 

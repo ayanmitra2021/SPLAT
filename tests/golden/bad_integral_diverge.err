@@ -1,0 +1,7 @@
+[SE00307] 📉 MATH SAYS NO [Line 3]: The integral did not converge: the estimate 422.22696212714044 was still off by about 8.2E+000 after 600 subdivisions. A divergent integrand (1/x across 0, say) has no finite area.
+  --> bad_integral_diverge.splat:3:10
+   |
+ 3 | r::f64 = ∫[0.0..1.0] |x| 1.0 / x
+   |          ^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Check the operands before the operation.
+

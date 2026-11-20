@@ -1,0 +1,39 @@
+# Phase 12: elementwise operators with NumPy trailing-dimension broadcasting, and scalar ops.
+A::f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+row::f32[3] = f32[10, 20, 30]
+col::f32[2, 1] = f32[[100], [200]]
+
+print A .+ row
+print A .+ col
+print col .* row
+print A .- 1.0
+print 1.0 .- A
+print A ./ 2.0
+print A * 2.0
+print 2.0 * A
+print A / 2.0
+print A + 1.0
+print A + A
+print A - A
+print(-A)
+print A ** 2
+print A .* A
+print A ./ A
+
+# Different element types never mix implicitly.
+D := f64(A)
+print D .+ 0.5
+print D == f64(A)
+print A == A
+print A != A + 1.0
+
+# A tensor can be compared with another of a different shape: they are simply unequal.
+print A == row
+
+# Reductions.
+print sum(A)
+print mean(A)
+print max(A)
+print min(A)
+print argmax(A)
+print prod(f32[1, 2, 3, 4])

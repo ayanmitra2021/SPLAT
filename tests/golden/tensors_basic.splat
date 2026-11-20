@@ -1,0 +1,33 @@
+# Phase 12: tensor types, literals, constructors, printing.
+A::f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+print A
+print A.shape()
+print len(A)
+
+# The type prefix makes a literal; whole numbers are fine for float tensors.
+v := f32[1, 2, 3]
+w := f64[0.5, 0.25]
+h := f16[1.5, 2.5]
+print v
+print w
+print h
+
+print zeros(2, 2)
+print ones(2, 3)
+print eye(3)
+print arange(5)
+print arange(2, 8, 2)
+print arange(0.0, 1.0, 0.25)
+print linspace(0.0, 1.0, 5)
+print reshape(arange(6), 2, 3)
+
+# The expected type picks the element type and the shape.
+Z::f64[2, 2] = zeros(2, 2)
+print Z
+n := 3
+Y := zeros(n, 2)
+print Y.shape()
+
+# Printing aligns columns.
+print f32[[1.5, 22.25], [100.0, 3.0]]
+print "{f32[[1.0, 2.0], [3.0, 4.5]]:.2}"

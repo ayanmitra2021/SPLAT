@@ -75,8 +75,6 @@ public sealed partial class Interpreter
                 catch (JsonException e) { throw Fail(Templates.BadJson(span, $"That is not valid JSON: {e.Message}")); }
                 return true;
             case "to_json": result = Value.Str(ToJsonNode(a[0])?.ToJsonString() ?? "null"); return true;
-            case "load_csv": result = LoadCsv(a[0].AsString, span); return true;
-            case "save_csv": SaveCsv(a[0].AsString, a[1], span); return true;
 
             case "now": result = Value.Temporal(VKind.Stamp, NowStamp()); return true;
             case "today": result = Value.Temporal(VKind.Date, Temporal.FromDateOnly(DateOnly.FromDateTime(DateTime.Now))); return true;
@@ -302,36 +300,6 @@ public sealed partial class Interpreter
     }
 
     // ---- CSV (rows of f32; the tensor-returning version arrives with tensors) ----
-
-    private Value LoadCsv(string path, SourceSpan span)
-    {
-        if (!File.Exists(path)) throw Fail(Templates.FileNotFound(span, path));
-        var lines = Io(span, path, () => File.ReadAllLines(path));
-        var rows = new SplatList();
-        for (int i = 0; i < lines.Length; i++)
-        {
-            if (string.IsNullOrWhiteSpace(lines[i])) continue;
-            var row = new SplatList();
-            bool ok = true;
-            foreach (var cell in lines[i].Split(','))
-            {
-                if (float.TryParse(cell.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var f)) row.Items.Add(Value.Float(VKind.F32, f));
-                else { ok = false; break; }
-            }
-            if (ok) rows.Items.Add(Value.List(row));
-            else if (rows.Items.Count > 0 || i > 0)
-                throw Fail(Templates.IoError(span, $"'{path}' line {i + 1}", "this CSV cell is not a number (only a first header row may be text)"));
-        }
-        return Value.List(rows);
-    }
-
-    private void SaveCsv(string path, Value rows, SourceSpan span)
-    {
-        var sb = new StringBuilder();
-        foreach (var row in rows.AsList.Items)
-            sb.Append(string.Join(",", row.AsList.Items.Select(c => ((float)c.AsDouble).ToString("R", CultureInfo.InvariantCulture)))).Append('\n');
-        Io(span, path, () => { File.WriteAllText(path, sb.ToString()); return 0; });
-    }
 
     // ---- dates and times ----
 

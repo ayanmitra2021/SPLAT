@@ -332,15 +332,8 @@ public sealed partial class Interpreter
         var rhs = a.Op == TokenKind.Assign ? EvalOwned(a.Value, env) : Eval(a.Value, env);
         var old = cell.V;
         cell.Moved = false;
-        cell.V = a.Op switch
-        {
-            TokenKind.Assign => rhs,
-            TokenKind.PlusAssign => Binary(TokenKind.Plus, cell.V, rhs, a.Span),
-            TokenKind.MinusAssign => Binary(TokenKind.Minus, cell.V, rhs, a.Span),
-            TokenKind.StarAssign => Binary(TokenKind.Star, cell.V, rhs, a.Span),
-            TokenKind.SlashAssign => Binary(TokenKind.Slash, cell.V, rhs, a.Span),
-            _ => throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")),
-        };
+        cell.V = a.Op == TokenKind.Assign ? rhs
+            : Binary(BaseOpOf(a.Op) ?? throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")), cell.V, rhs, a.Span);
         if (a.Op == TokenKind.Assign && cell.V.Kind is VKind.Object or VKind.List or VKind.Tuple or VKind.Enum or VKind.Set or VKind.Map)
         {
             // Replacing an owned object ends its life; the new value is claimed by the same variable.
@@ -437,6 +430,9 @@ public sealed partial class Interpreter
             case VKind.Tuple:
                 foreach (var item in v.AsTuple) yield return item;
                 break;
+            case VKind.Tensor:
+                foreach (var item in IterateTensor(v.AsTensor)) yield return item;
+                break;
         }
     }
 
@@ -460,6 +456,13 @@ public sealed partial class Interpreter
                 return set.AsSet.Contains(x);
             case VKind.Map:
                 return set.AsMap.ContainsKey(x);
+            case VKind.Tensor:
+            {
+                var t = set.AsTensor;
+                double target = x.IsFloat ? x.AsDouble : (double)x.AsInt128;
+                foreach (var pos in t.Positions()) if (t.ReadAt(pos) == target) return true;
+                return false;
+            }
             default:
                 return false;
         }
@@ -468,6 +471,14 @@ public sealed partial class Interpreter
     // ---- expressions ----
 
     private Value Eval(Expr e, Env env)
+    {
+        var v = EvalCore(e, env);
+        // A `?` dimension that flowed into a slot needing a known size is checked now (spec 4.2).
+        if (v.Kind == VKind.Tensor && _info.HasGuards) CheckGuard(e, v);
+        return v;
+    }
+
+    private Value EvalCore(Expr e, Env env)
     {
         switch (e)
         {
@@ -507,6 +518,12 @@ public sealed partial class Interpreter
                     ReturnsValue = !(ft?.Ret is PrimType { Kind: Prim.Unit }),
                 });
             }
+            case ListLiteral tl when _info.TypeOf(tl) is TensorSType tts:
+                return EvalTensorList(tl, tts, env);
+            case PostfixExpr pf: return EvalTranspose(pf, env);
+            case NormExpr nm: return EvalNorm(nm, env);
+            case ReduceExpr rd: return EvalReduce(rd, env);
+            case IntegExpr ig: return EvalIntegral(ig, env);
             case ListLiteral ll:
             {
                 var list = new SplatList();
@@ -573,6 +590,7 @@ public sealed partial class Interpreter
         }
 
         var v = Eval(u.Operand, env);
+        if (v.Kind == VKind.Tensor) return Value.OfTensor(Guarded(u.Span, () => _kernels.Unary(UnOp.Neg, v.AsTensor)));
         if (v.IsFloat) return Value.Float(v.Kind, -v.AsDouble);
         var r = -v.AsInt128;
         return CheckedInt(v.Kind, r, "-", u.Span);
@@ -669,6 +687,7 @@ public sealed partial class Interpreter
         if (name == "set") return MakeSet(c, env);
         if (name == "map") return MakeMap(c, env);
         var args = c.Args.Select(a => Eval(a.Value, env)).ToArray();
+        if (Prelude.Tensor.Contains(name)) return CallTensorBuiltin(name, c, args);
         switch (name)
         {
             case "readl":
@@ -697,6 +716,7 @@ public sealed partial class Interpreter
                     VKind.List => Value.Int(VKind.Usize, args[0].AsList.Items.Count),
                     VKind.Set => Value.Int(VKind.Usize, args[0].AsSet.Count),
                     VKind.Map => Value.Int(VKind.Usize, args[0].AsMap.Count),
+                    VKind.Tensor => Value.Int(VKind.Usize, args[0].AsTensor.Rank == 0 ? 1 : args[0].AsTensor.Shape[0]),
                     _ => throw Fail(Templates.Internal(c.Span, $"len: unexpected type {args[0].TypeName}")),
                 };
             case "split":

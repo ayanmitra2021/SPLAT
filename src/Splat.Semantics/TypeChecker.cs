@@ -106,6 +106,13 @@ public sealed partial class TypeChecker
 
     private SType Mismatch(SourceSpan span, SType found, SType expected)
     {
+        if (found is TensorSType fa && expected is TensorSType ea && fa.Elem.Equals(ea.Elem) && fa.Rank == ea.Rank)
+        {
+            // Same element type and rank: the shapes are what disagree.
+            Report(Templates.GeometryCrime(span, $"Tried to shove a '{N(found)}' into a '{N(expected)}' slot. The shapes disagree ({ShapeDifference(fa, ea)}).",
+                $"Pass a tensor of shape {N(expected)}, or declare the slot with '?' for the dimension that varies."));
+            return SType.Error;
+        }
         Report(Templates.TypeMismatch(span, N(found), N(expected)));
         return SType.Error;
     }
@@ -138,7 +145,7 @@ public sealed partial class TypeChecker
             case TupleType tup:
                 return new TupleSType(tup.Items.Select(ResolveType).ToList());
             case TensorType tt:
-                return NotYet(tt.Span, "tensor types", 12);
+                return ResolveTensorType(tt);
             case RefType r:
                 return NotYet(r.Span, r.IsPoke ? "poke types ('~T')" : "peek types ('&T')", 17);
             case FuncType f:
@@ -183,6 +190,7 @@ public sealed partial class TypeChecker
     {
         var t = Infer(e.Expression, scope, expected);
         if (!Types.Compatible(t, expected)) Mismatch(e.Expression.Span, t, expected);
+        else NoteGuard(e.Expression, t, expected);
         return true;
     }
 
@@ -234,6 +242,7 @@ public sealed partial class TypeChecker
         if (declared is not null)
         {
             if (!Types.Compatible(vt, declared)) Mismatch(b.Value.Span, vt, declared);
+            else NoteGuard(b.Value, vt, declared);
             final = declared;
         }
         else final = vt;
@@ -246,14 +255,14 @@ public sealed partial class TypeChecker
         TokenKind.MinusAssign => TokenKind.Minus,
         TokenKind.StarAssign => TokenKind.Star,
         TokenKind.SlashAssign => TokenKind.Slash,
+        TokenKind.AtAssign => TokenKind.At,
+        TokenKind.DotStarAssign => TokenKind.DotStar,
+        TokenKind.DotSlashAssign => TokenKind.DotSlash,
         _ => null,
     };
 
     private void CheckAssign(AssignStmt a, Scope scope)
     {
-        if (a.Op is TokenKind.AtAssign) { NotYet(a.Span, "'@='", 13); return; }
-        if (a.Op is TokenKind.DotStarAssign or TokenKind.DotSlashAssign) { NotYet(a.Span, $"'{(a.Op == TokenKind.DotStarAssign ? ".*=" : "./=")}'", 12); return; }
-
         if (a.Target is not NameExpr name)
         {
             if (a.Target is IndexExpr aix) { CheckIndexAssign(a, aix, scope); return; }
@@ -307,6 +316,7 @@ public sealed partial class TypeChecker
         }
         var t = Infer(y.Value, scope, _fn.Ret);
         if (!Types.Compatible(t, _fn.Ret)) Mismatch(y.Value.Span, t, _fn.Ret);
+        else NoteGuard(y.Value, t, _fn.Ret);
     }
 
     private bool CheckIf(IfStmt h, Scope scope, SType? tailExpect)
@@ -555,7 +565,7 @@ public sealed partial class TypeChecker
         {
             case IntLiteral i: return IntLit(i, hint, negated: false);
             case FloatLiteral:
-                return hint is PrimType { Kind: var k } && Types.IsFloat(k) ? hint! : Types.F32;
+                return ScalarHint(hint) is PrimType { Kind: var k } && Types.IsFloat(k) ? ScalarHint(hint)! : Types.F32;
             case CharLiteral: return Types.Char;
             case BoolLiteral: return Types.Bool;
             case UnitLiteral: return Types.Unit;
@@ -581,14 +591,16 @@ public sealed partial class TypeChecker
             case ListLiteral ll: return CheckListLiteral(ll, scope, hint);
             case IndexExpr ix: return CheckIndex(ix, scope, hint);
             case PickExpr pk: return CheckPick(pk, scope, hint);
-            case PostfixExpr p: return NotYet(p.Span, "transpose", 13);
-            case FullSlice fs: return NotYet(fs.Span, "slicing", 12);
+            case PostfixExpr p: return CheckTranspose(p, scope);
+            case FullSlice fs:
+                Report(Templates.UnexpectedToken(fs.Span, ":", "a ':' only inside an index, as in A[:, 0]"));
+                return SType.Error;
             case MemberExpr m: return CheckMember(m, scope);
             case TemporalLiteral tl: return TemporalType(tl);
-            case NormExpr nm: return NotYet(nm.Span, "norms", 14);
+            case NormExpr nm: return CheckNorm(nm, scope, hint);
             case DerivExpr dv: return NotYet(dv.Span, "'∂'", 15);
-            case IntegExpr ig: return NotYet(ig.Span, "'∫'", 14);
-            case ReduceExpr rd: return NotYet(rd.Span, rd.IsProduct ? "'∏'" : "'∑'", 14);
+            case IntegExpr ig: return CheckIntegral(ig, scope, hint);
+            case ReduceExpr rd: return CheckReduce(rd, scope, hint);
             case FitExpr ft: return NotYet(ft.Span, ft.IsClassify ? "'classify'" : "'regress'", 15);
             default: return SType.Error;
         }
@@ -596,6 +608,7 @@ public sealed partial class TypeChecker
 
     private SType IntLit(IntLiteral lit, SType? hint, bool negated)
     {
+        hint = ScalarHint(hint);
         var t = hint is PrimType { Kind: var k } && Types.IsInt(k) ? (PrimType)hint : Types.I32;
         Int128 limit = Types.Max(t.Kind) + (negated && Types.IsSigned(t.Kind) ? 1 : 0);
         if ((Int128)lit.Value > limit)
@@ -622,7 +635,7 @@ public sealed partial class TypeChecker
                 continue;
             }
             if (t.IsError || t.IsAny) continue;
-            if (spec.Precision is not null && !Types.IsFloat(t))
+            if (spec.Precision is not null && !Types.IsFloat(t) && !(t is TensorSType { Elem: var tel } && Types.IsFloat(tel)))
                 Report(Templates.BadFormat(te.Span, te.Format, $"sets a precision, which only floats (f16, f32, f64) have, but this is a '{N(t)}'"));
             else if (spec.Radix is not null && !Types.IsInt(t))
                 Report(Templates.BadFormat(te.Span, te.Format, $"asks for base '{spec.Radix}', which only integers have, but this is a '{N(t)}'"));
@@ -674,6 +687,7 @@ public sealed partial class TypeChecker
                 }
                 else t = Infer(u.Operand, scope, hint);
                 if (t.IsError || t.IsAny) return t;
+                if (t is TensorSType nt && Types.IsFloat(nt.Elem)) return nt;
                 if (!Types.IsNumeric(t) || (Types.IsInt(t) && !Types.IsSigned(t)))
                 {
                     Report(Templates.BadOperator(u.Span, "-", N(t), null,
@@ -734,7 +748,9 @@ public sealed partial class TypeChecker
         TokenKind.Percent => "%", TokenKind.StarStar => "**", TokenKind.EqEq => "==", TokenKind.BangEq => "!=",
         TokenKind.Lt => "<", TokenKind.Le => "<=", TokenKind.Gt => ">", TokenKind.Ge => ">=",
         TokenKind.And => "and", TokenKind.Or => "or", TokenKind.DotDot => "..", TokenKind.DotDotEq => "..=",
-        TokenKind.PipeGreater => "|>", TokenKind.GreaterGreater => ">>", _ => k.ToString(),
+        TokenKind.PipeGreater => "|>", TokenKind.GreaterGreater => ">>",
+        TokenKind.At => "@", TokenKind.DotStar => ".*", TokenKind.DotSlash => "./", TokenKind.DotPlus => ".+", TokenKind.DotMinus => ".-",
+        TokenKind.Backslash => "\\", TokenKind.MiddleDot => "·", _ => k.ToString(),
     };
 
     private SType BadPair(SourceSpan span, string op, SType l, SType r)
@@ -766,7 +782,10 @@ public sealed partial class TypeChecker
         if (ContainsError(l) || ContainsError(r)) return SType.Error;
         if (l is ClassSType && TryOverload(op, l, r, span, out var overloaded)) return overloaded;
         if (l.IsAny || r.IsAny) return l.IsAny ? r : l;
+        if (l is TensorSType || r is TensorSType) return TensorArithmetic(op, l, r, span, opText);
         if (Types.IsTemporal(l) || Types.IsTemporal(r)) return TemporalArithmetic(op, l, r, span, opText);
+        // A float raised to an integer power keeps the float type (the spec's own `||self||_F ** 2`).
+        if (op == TokenKind.StarStar && Types.IsFloat(l) && Types.IsInt(r)) return l;
         if (!l.Equals(r)) return BadPair(span, opText, l, r);
         if (Types.IsNumeric(l)) return l;
         if (op == TokenKind.Plus && l.Equals(Types.Txt)) return Types.Txt;
@@ -798,11 +817,13 @@ public sealed partial class TypeChecker
                 var al = Infer(b.Left, scope);
                 var ar = Infer(b.Right, scope, al is ClassSType ? null : al);
                 if (b.Op == TokenKind.At && al is ClassSType && TryOverload(b.Op, al, ar, b.Span, out var ores)) return ores;
-                return NotYet(b.Span, $"'{(b.Op == TokenKind.At ? "@" : b.Op == TokenKind.Backslash ? "\\" : "·")}'", 13);
+                return CheckTensorOperator(b, al, ar);
             }
             case TokenKind.DotStar or TokenKind.DotSlash or TokenKind.DotPlus or TokenKind.DotMinus:
-                Infer(b.Left, scope); Infer(b.Right, scope);
-                return NotYet(b.Span, "elementwise operators", 12);
+            {
+                var (dl, dr) = InferPair(b.Left, b.Right, scope, hint);
+                return CheckTensorOperator(b, dl, dr);
+            }
 
             case TokenKind.In:
                 return CheckMembership(b, scope);
@@ -830,6 +851,12 @@ public sealed partial class TypeChecker
                 if (ContainsError(l) || ContainsError(r)) return Types.Bool;
                 if (l is ClassSType && TryOverload(b.Op, l, r, b.Span, out var oeq)) return oeq;
                 if (l.IsAny || r.IsAny) return Types.Bool;
+                if (l is TensorSType lte && r is TensorSType rte)
+                {
+                    // Whole-tensor comparison: any two tensors of one element type may be compared; different shapes are simply unequal.
+                    if (!lte.Elem.Equals(rte.Elem)) BadPair(b.Span, OpText(b.Op), l, r);
+                    return Types.Bool;
+                }
                 if (!(l.Equals(r) || (Types.Compatible(l, r) && Types.Compatible(r, l)))) { BadPair(b.Span, OpText(b.Op), l, r); return Types.Bool; }
                 if (!Types.IsEquatable(l))
                     Report(Templates.BadOperator(b.Span, OpText(b.Op), N(l), N(r), l is ClassSType
@@ -844,6 +871,12 @@ public sealed partial class TypeChecker
                 if (l.IsError || r.IsError) return Types.Bool;
                 if (l is ClassSType && b.Op is TokenKind.Lt or TokenKind.Gt && TryOverload(b.Op, l, r, b.Span, out var olt)) return olt;
                 if (l.IsAny || r.IsAny) return Types.Bool;
+                if (l is TensorSType || r is TensorSType)
+                {
+                    Report(Templates.BadOperator(b.Span, OpText(b.Op), N(l), N(r),
+                        "A tensor has no single order. Reduce it first: 'max(A) < 3.0', 'min(A) >= 0.0', or compare elements with indexing."));
+                    return Types.Bool;
+                }
                 if (!l.Equals(r)) { BadPair(b.Span, OpText(b.Op), l, r); return Types.Bool; }
                 bool ordered = Types.IsNumeric(l) || l.Equals(Types.Txt) || l.Equals(Types.Char) || Types.IsTemporal(l);
                 if (!ordered)
@@ -854,6 +887,12 @@ public sealed partial class TypeChecker
             default:
             {
                 var (l, r) = InferPair(b.Left, b.Right, scope, hint);
+                if (b.Op == TokenKind.StarStar && Types.IsInt(l) && Types.IsInt(r) && TryConstInt(b.Right, out var exp) && exp < 0)
+                {
+                    Report(Templates.BadOperator(b.Span, "**", N(l), N(r),
+                        "An integer cannot be raised to a negative power (the answer is not an integer). Use a float base, for example 2.0 ** -1.0."));
+                    return SType.Error;
+                }
                 return ArithmeticType(b.Op, l, r, b.Span, OpText(b.Op));
             }
         }
@@ -947,7 +986,8 @@ public sealed partial class TypeChecker
     }
 
     /// <summary>What <c>x in S</c> compares <c>x</c> with: a map is searched by key, everything else by element.</summary>
-    private static SType? MembershipElement(SType right) => right is MapSType mp ? mp.Key : ElementOf(right);
+    private static SType? MembershipElement(SType right) =>
+        right is MapSType mp ? mp.Key : right is TensorSType ts ? ts.Elem : ElementOf(right);
 
     private SType CheckPipe(BinaryExpr b, Scope scope, SType? hint)
     {
@@ -1114,9 +1154,15 @@ public sealed partial class TypeChecker
         IReadOnlyList<SType> ptypes = ft.Params;
         IReadOnlyList<SType>? hintParams = null;
         SType retType = ft.Ret;
-        if (decl is { Generics.Count: > 0 })
+        var dimNames = new List<string>();
+        foreach (var p in ft.Params) Shapes.CollectVars(p, dimNames);
+        Shapes.CollectVars(ft.Ret, dimNames);
+        if (decl is not null && (decl.Generics.Count > 0 || dimNames.Count > 0))
         {
-            vars = decl.Generics.ToDictionary(g => g.Name, g => (SType)new InferVarSType(g.Name), StringComparer.Ordinal);
+            vars = decl.Generics.Where(g => !g.IsDim).ToDictionary(g => g.Name, g => (SType)new InferVarSType(g.Name), StringComparer.Ordinal);
+            // Shape monomorphisation: every `$Dim` of the signature gets a fresh inference dimension for THIS call site.
+            foreach (var dn in dimNames.Concat(decl.Generics.Where(g => g.IsDim).Select(g => g.Name)))
+                vars[dn] = new DimBindingSType(new InferSDim(dn));
             ptypes = ft.Params.Select(p => Types.Substitute(p, vars)).ToList();
             retType = Types.Substitute(ft.Ret, vars);
             hintParams = HintInstance(decl.Generics.Select(g => g.Name).ToList(), ft.Params, ft.Ret, hint);
@@ -1132,6 +1178,7 @@ public sealed partial class TypeChecker
                 else at = Infer(c.Args[i].Value, scope, map[i] >= 0 ? (vars is null ? ptypes[map[i]] : ArgHint(ptypes[map[i]], hintParams?[map[i]])) : null);
                 if (map[i] >= 0 && !Types.Unify(ptypes[map[i]], at))
                     Mismatch(c.Args[i].Value.Span, at, vars is null ? ptypes[map[i]] : Types.Resolve(ptypes[map[i]]));
+                else if (map[i] >= 0) NoteGuard(c.Args[i].Value, at, Types.Resolve(ptypes[map[i]]));
             }
         }
 
@@ -1139,7 +1186,7 @@ public sealed partial class TypeChecker
         if (!bad) _info.SetArgMap(c, map);
         if (bad) return SType.Error;
         if (vars is null) return retType;
-        _info.SetTypeArgs(c, decl!.Generics.Select(g => Types.Resolve(vars[g.Name])).ToList());
+        _info.SetTypeArgs(c, decl!.Generics.Select(g => vars[g.Name] is DimBindingSType ? SType.Any : Types.Resolve(vars[g.Name])).ToList());
         return Types.Resolve(retType);
     }
 
@@ -1149,6 +1196,7 @@ public sealed partial class TypeChecker
     {
         if (name.Name == "set") return CheckSetCall(c, name, scope, hint);
         if (name.Name == "map") return CheckMapCall(c, name, scope, hint);
+        if (Prelude.Tensor.Contains(name.Name)) return CheckTensorBuiltin(c, name, scope, hint);
 
         if (c.Args.Any(a => a.Name is not null))
             Report(Templates.UnexpectedToken(c.Args.First(a => a.Name is not null).Span, "a named argument", $"positional arguments for '{name.Name}'"));
@@ -1213,8 +1261,8 @@ public sealed partial class TypeChecker
             }
             var t = Infer(c.Args[0].Value, scope);
             _info.Set(name, new FuncSType([t], Types.Usize));
-            if (!t.IsError && !t.IsAny && t is not PrimType { Kind: Prim.Txt } && t is not ListSType && t is not SetSType && t is not MapSType)
-                Report(Templates.TypeMismatch(c.Args[0].Value.Span, N(t), "txt, List, Set, or Map"));
+            if (!t.IsError && !t.IsAny && t is not PrimType { Kind: Prim.Txt } && t is not ListSType && t is not SetSType && t is not MapSType && t is not TensorSType)
+                Report(Templates.TypeMismatch(c.Args[0].Value.Span, N(t), "txt, List, Set, Map, or a tensor"));
             return Types.Usize;
         }
 
@@ -1291,6 +1339,7 @@ public sealed partial class TypeChecker
         // `i64(5)` makes the literal an i64 directly; `f32(3)` converts an i32.
         var from = Infer(c.Args[0].Value, scope, Types.IsInt(target) ? target : null);
         if (from.IsError || from.IsAny) return target;
+        if (from is TensorSType fts && Types.IsFloat(target) && Types.IsFloat(fts.Elem)) return fts.WithElem(target); // f64(A)
         if (target.Kind == Prim.Txt && from is RangeSType) return target; // txt(1..4) is "1..4"
         if (from is not PrimType fp)
         {
@@ -1481,6 +1530,7 @@ public sealed partial class TypeChecker
 
     private SType CheckListLiteral(ListLiteral ll, Scope scope, SType? hint)
     {
+        if (hint is TensorSType th) return CheckTensorList(ll, th, scope);
         var elemHint = (hint as ListSType)?.Elem;
         if (ll.Items.Count == 0)
         {
@@ -1526,7 +1576,13 @@ public sealed partial class TypeChecker
 
     private SType CheckIndex(IndexExpr ix, Scope scope, SType? hint)
     {
+        // f32[1, 2, 3] and f32[[1, 2], [3, 4]]: a number-type name followed by a bracketed list is a tensor literal.
+        if (ix.Target is NameExpr { Name: var elemName } && scope.Lookup(elemName) is null
+            && Types.ByName.TryGetValue(elemName, out var litElem) && Types.IsNumeric(litElem))
+            return CheckPrefixedTensorLiteral(ix, litElem, scope);
+
         var target = Infer(ix.Target, scope);
+        if (target is TensorSType ttarget) return CheckTensorIndex(ix, ttarget, scope);
         if (ix.Indices.Count != 1)
         {
             foreach (var i in ix.Indices) if (i is not FullSlice) Infer(i, scope);
@@ -1805,6 +1861,7 @@ public sealed partial class TypeChecker
 
         if (recv.IsError) { InferAll(); return SType.Error; }
         if (recv.IsAny) { InferAll(); return SType.Any; }
+        if (recv is TensorSType tensorRecv && CheckTensorMethod(c, m, tensorRecv, scope) is { } tensorResult) return tensorResult;
 
         // name -> (parameter types, return type, mutates)
         (SType[] Params, SType Ret, bool Mutates)? sig = null;
@@ -1892,6 +1949,7 @@ public sealed partial class TypeChecker
     private void CheckIndexAssign(AssignStmt a, IndexExpr ix, Scope scope)
     {
         var target = Infer(ix.Target, scope);
+        if (target is TensorSType tt) { CheckTensorIndexAssign(a, ix, tt, scope); return; }
         SType? elem = null;
         if (ix.Indices.Count != 1 || ix.Indices[0] is FullSlice)
         {

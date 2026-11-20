@@ -1,0 +1,77 @@
+[SE00106] 🤹 WRONG TOOL [Line 3]: '||x||' has no idea what to do with a 'bool'.
+  --> bad_math.splat:3:6
+   |
+ 3 | a := ||5 > 3||
+   |      ^^^^^^^^^
+  Fix: A norm measures a tensor (or a number); this is neither.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 4]: Tried to shove a 'txt' into a 'a number (the body of ∑[...] is summed or multiplied term by term)' slot. I'm strictly typed, bestie.
+  --> bad_math.splat:4:19
+   |
+ 4 | b := ∑[i in 0..3] "x"
+   |                   ^^^
+  Fix: Provide a value of type 'a number (the body of ∑[...] is summed or multiplied term by term)', or change the declared type to 'txt'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 5]: Tried to shove a 'f32' into a 'something iterable (a range, txt, List, Set, or Map)' slot. I'm strictly typed, bestie.
+  --> bad_math.splat:5:13
+   |
+ 5 | c := ∑[i in 3.5] i
+   |             ^^^
+  Fix: Provide a value of type 'something iterable (a range, txt, List, Set, or Map)', or change the declared type to 'f32'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 6]: Tried to shove a 'i32..i32' into a 'float bounds of one type, for example 0.0..3.0 (no implicit int to float)' slot. I'm strictly typed, bestie.
+  --> bad_math.splat:6:8
+   |
+ 6 | d := ∫[0..1] |x| x
+   |        ^^^^
+  Fix: Provide a value of type 'float bounds of one type, for example 0.0..3.0 (no implicit int to float)', or change the declared type to 'i32..i32'.
+
+[SE00102] 🧮 COUNT YOUR ARGS [Line 7]: 'the integrand' wants 1 argument(s) but you handed it 2.
+  --> bad_math.splat:7:18
+   |
+ 7 | e := ∫[0.0..1.0] |x, y| x
+   |                  ^^^^^^^^
+  Fix: Call 'the integrand' with exactly 1 argument(s).
+
+[SE00002] 🤨 WAIT WHAT [Line 8]: Found 'step' where I wanted 'tol = 1e-8' or 'samples = 100000'. The parser is concerned.
+  --> bad_math.splat:8:18
+   |
+ 8 | f := ∫[0.0..1.0, step = 2] |x| x
+   |                  ^^^^^^^^
+  Fix: Replace 'step' with 'tol = 1e-8' or 'samples = 100000'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 9]: Tried to shove a 'i32' into a 'a float (f16, f32, f64) or a float tensor' slot. I'm strictly typed, bestie.
+  --> bad_math.splat:9:11
+   |
+ 9 | g := sqrt(4)
+   |           ^
+  Fix: Provide a value of type 'a float (f16, f32, f64) or a float tensor', or change the declared type to 'i32'.
+
+[SE00106] 🤹 WRONG TOOL [Line 10]: '**' has no idea what to do with a 'i32' and a 'i32'.
+  --> bad_math.splat:10:6
+    |
+ 10 | h := 2 ** -1
+    |      ^^^^^^^
+  Fix: An integer cannot be raised to a negative power (the answer is not an integer). Use a float base, for example 2.0 ** -1.0.
+
+[SE00106] 🤹 WRONG TOOL [Line 11]: 'max' has no idea what to do with a 'i32' and a 'f32'.
+  --> bad_math.splat:11:6
+    |
+ 11 | i := max(1, 2.0)
+    |      ^^^^^^^^^^^
+  Fix: max(a, b) compares two numbers of one type. For a tensor or List use max(xs) with one argument.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 12]: Tried to shove a 'List<i32>' into a 'floats (the mean of integers is not an integer; convert with f64(x) first)' slot. I'm strictly typed, bestie.
+  --> bad_math.splat:12:11
+    |
+ 12 | j := mean([1, 2])
+    |           ^^^^^^
+  Fix: Provide a value of type 'floats (the mean of integers is not an integer; convert with f64(x) first)', or change the declared type to 'List<i32>'.
+
+[SE00106] 🤹 WRONG TOOL [Line 13]: '||x||' has no idea what to do with a 'txt'.
+  --> bad_math.splat:13:6
+    |
+ 13 | k := ||"txt"||
+    |      ^^^^^^^^^
+  Fix: A norm measures a tensor (or a number); this is neither.
+

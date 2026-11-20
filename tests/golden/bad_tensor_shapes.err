@@ -1,0 +1,77 @@
+[SE00104] 📐 GEOMETRY CRIME [Line 7]: Tried to '.+' a 'f32[3, 4]' with a 'f32[5]'. Counting from the right, axis 1 has 4 against 5, and neither is 1.
+  --> bad_tensor_shapes.splat:7:6
+   |
+ 7 | x := A .+ B
+   |      ^^^^^^
+  Fix: Broadcasting lines the shapes up on the right: each pair of dimensions must be equal, or one of them must be 1.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 8]: Tried to '+' a 'f32[3, 4]' with a 'f32[2, 4]'. Axis 0 is 3 on the left and 2 on the right.
+  --> bad_tensor_shapes.splat:8:6
+   |
+ 8 | y := A + C
+   |      ^^^^^
+  Fix: '+' needs identical shapes; use '.+' to broadcast, or reshape one side.
+
+[SE00106] 🤹 WRONG TOOL [Line 9]: '*' has no idea what to do with a 'f32[3, 4]' and a 'f32[3, 4]'.
+  --> bad_tensor_shapes.splat:9:6
+   |
+ 9 | z := A * A
+   |      ^^^^^
+  Fix: A tensor times a tensor is ambiguous: did you mean '.*' (elementwise) or '@' (matrix product)?
+
+[SE00106] 🤹 WRONG TOOL [Line 10]: '/' has no idea what to do with a 'f32[3, 4]' and a 'f32[3, 4]'.
+  --> bad_tensor_shapes.splat:10:6
+    |
+ 10 | w := A / A
+    |      ^^^^^
+  Fix: A tensor divided by a tensor is ambiguous: did you mean './' (elementwise)?
+
+[SE00106] 🤹 WRONG TOOL [Line 11]: '.+' has no idea what to do with a 'f32[3, 4]' and a 'f64[3, 4]'.
+  --> bad_tensor_shapes.splat:11:6
+    |
+ 11 | v := A .+ D
+    |      ^^^^^^
+  Fix: The element types differ ('f32' versus 'f64'). Convert one side explicitly, for example f32(B).
+
+[SE00106] 🤹 WRONG TOOL [Line 12]: '<' has no idea what to do with a 'f32[3, 4]' and a 'f32[2, 4]'.
+  --> bad_tensor_shapes.splat:12:6
+    |
+ 12 | u := A < C
+    |      ^^^^^
+  Fix: A tensor has no single order. Reduce it first: 'max(A) < 3.0', 'min(A) >= 0.0', or compare elements with indexing.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 13]: Tried to shove a 'f32[3, 4]' into a 'f32[3, 3]' slot. The shapes disagree (axis 1 is 4 but 3 was expected).
+  --> bad_tensor_shapes.splat:13:16
+    |
+ 13 | t::f32[3, 3] = A
+    |                ^
+  Fix: Pass a tensor of shape f32[3, 3], or declare the slot with '?' for the dimension that varies.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 14]: Tried to index a 'f32[3, 4]' with 3 indices, but it only has 2 axes.
+  --> bad_tensor_shapes.splat:14:6
+    |
+ 14 | s := A[1, 2, 3]
+    |      ^^^^^^^^^^
+  Fix: Use at most one index per axis.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 15]: Tried to stack a 'f32[1]' row onto 'f32[2]' rows. The rows of a tensor literal must all have the same shape.
+  --> bad_tensor_shapes.splat:15:18
+    |
+ 15 | r := f32[[1, 2], [3]]
+    |                  ^^^
+  Fix: Make every row the same length, or build a List instead.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 16]: Tried to reshape a 'f32[3, 4]' (12 elements) into a 'f32[5, 5]' (25 elements).
+  --> bad_tensor_shapes.splat:16:6
+    |
+ 16 | q := reshape(A, 5, 5)
+    |      ^^^^^^^^^^^^^^^^
+  Fix: A reshape keeps the element count: the new dimensions must multiply to the same number.
+
+[SE00002] 🤨 WAIT WHAT [Line 17]: Found 'a 'f32' index' where I wanted an integer index, a range such as 0..3, or ':' for a whole axis. The parser is concerned.
+  --> bad_tensor_shapes.splat:17:8
+    |
+ 17 | p := A[0.5]
+    |        ^^^
+  Fix: Replace 'a 'f32' index' with an integer index, a range such as 0..3, or ':' for a whole axis.
+

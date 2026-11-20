@@ -1,0 +1,65 @@
+# Phase 14: norms, the math prelude and elementwise functions.
+v::f64[2] = f64[3, 4]
+A::f64[2, 2] = f64[[1, -2], [3, -4]]
+
+print ||v||
+print ||v||_1
+print ||v||_inf
+print "{||A||_F:.6}"
+print ||A||_1
+print ||A||_inf
+print ||-5||
+print ||-2.5||
+
+# Norms do not fight with `or` or with lambdas.
+fn far(a::f64[2], b::f64[2])::bool = ||a|| > 4.0 or ||b|| > 4.0
+print far(v, v)
+print far(f64[0, 1], f64[0, 2])
+n := |x::f64[2]| ||x||
+print n(v)
+print ||v - f64[0, 0]|| < 5.5
+
+# The scalar math prelude.
+print sqrt(16.0)
+print exp(0.0)
+print ln(1.0)
+print sin(0.0)
+print cos(0.0)
+print tan(0.0)
+print tanh(0.0)
+print "{erf(1.0):.6}"
+print abs(-3)
+print abs(-3.5)
+print floor(2.7)
+print ceil(2.2)
+print pow(2.0, 10.0)
+print min(3, 7)
+print max(3, 7)
+print min(1.5, -2.5)
+print max(1.5, -2.5)
+print 2.0 ** 10
+print 2 ** 10
+
+# The same functions work elementwise on tensors.
+print sqrt(f64[1, 4, 9])
+print abs(f64[-1, 2, -3])
+print floor(f64[1.5, -1.5])
+print pow(f64[1, 2, 3], 2.0)
+print f64[1, 2, 3] ** 2
+print f64[1, 2, 3] ** f64[3, 2, 1]
+print "{exp(f64[0, 1]):.5}"
+
+# Reductions over tensors and lists.
+print sum(A)
+print mean(v)
+print max(A)
+print min(A)
+print argmax(f64[3, 9, 2])
+print argmin(f64[3, 9, 2])
+print prod(f64[2, 3, 4])
+print sum([1, 2, 3])
+print max([4, 9, 2])
+print mean([1.0, 2.0, 6.0])
+
+# `sum` the function and `sum[...]` the reduction share a spelling but never clash.
+print sum(f64[1, 2, 3]) + f64(sum[i in 0..3] i)

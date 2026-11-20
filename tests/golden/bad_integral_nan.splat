@@ -1,0 +1,4 @@
+# Phase 14: an integrand that returns NaN.
+print "integrating..."
+r::f64 = ∫[-1.0..1.0] |x| sqrt(x)
+print r

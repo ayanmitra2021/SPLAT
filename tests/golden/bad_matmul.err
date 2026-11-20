@@ -1,0 +1,56 @@
+[SE00104] 📐 GEOMETRY CRIME [Line 7]: Tried to '@' a 'f32[3, 4]' with a 'f32[5, 2]'. 4 != 5. Even in parallel universes, these matrices cannot hug.
+  --> bad_matmul.splat:7:8
+   |
+ 7 | bad := A @ B
+   |        ^^^^^
+  Fix: The inner dimensions must match: left has 4, right has 5.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 8]: Tried to '@' a 'f32[3, 4]' with a 'f32[2, 4]'. 4 != 2. Even in parallel universes, these matrices cannot hug. Tip: Transpose with "'"?
+  --> bad_matmul.splat:8:12
+   |
+ 8 | fixable := A @ E
+   |            ^^^^^
+  Fix: The inner dimensions must match: left has 4, right has 2.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 9]: Tried to '@' a 'f32[4]' with a 'f32[5, 2]'. 4 != 5. Even in parallel universes, these matrices cannot hug.
+  --> bad_matmul.splat:9:8
+   |
+ 9 | vec := v @ B
+   |        ^^^^^
+  Fix: The inner dimensions must match: left has 4, right has 5.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 10]: Tried to '@' a 'f32[$N, $F]' with a 'f32[$N, $F]'. $F != $N. Even in parallel universes, these matrices cannot hug. Tip: Transpose with "'"?
+  --> bad_matmul.splat:10:40
+    |
+ 10 | fn gram(X::f32[$N, $F])::f32[$F, $F] = X @ X
+    |                                        ^^^^^
+  Fix: The inner dimensions must match: left has $F, right has $N.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 11]: Tried to '@' a 'f32[2, 3, 4]' with a 'f32[5, 4, 2]': the batch dimensions 2 and 5 cannot broadcast.
+  --> bad_matmul.splat:11:10
+    |
+ 11 | batch := zeros(2, 3, 4) @ zeros(5, 4, 2)
+    |          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Make the batch dimensions equal, or equal to 1.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 12]: Tried to solve 'f32[3, 4]' \ 'f32[4]'. The matrix has 3 rows but the right-hand side has 4.
+  --> bad_matmul.splat:12:10
+    |
+ 12 | solve := A \ v
+    |          ^^^^^
+  Fix: A \ b needs one equation (row of A) per entry of b.
+
+[SE00104] 📐 GEOMETRY CRIME [Line 13]: Tried to '@' a 'f32[4]' with a 'f32[5]'. 4 != 5. Even in parallel universes, these matrices cannot hug.
+  --> bad_matmul.splat:13:8
+    |
+ 13 | dot := v · zeros(5)
+    |        ^^^^^^^^^^^^
+  Fix: The inner dimensions must match: left has 4, right has 5.
+
+[SE00106] 🤹 WRONG TOOL [Line 14]: '@' has no idea what to do with a 'i32' and a 'i32'.
+  --> bad_matmul.splat:14:10
+    |
+ 14 | plain := 1 @ 2
+    |          ^^^^^
+  Fix: '@' is the matrix product of two tensors. For numbers use '*'.
+

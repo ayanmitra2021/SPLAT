@@ -1,0 +1,44 @@
+# Phase 13: the matrix product, transpose, dot, batches and compound assignment.
+A::f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+B::f32[3, 2] = [[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]
+print A @ B
+print B @ A
+print A'
+print A' @ A
+
+# Matrix-vector, vector-matrix and vector-vector.
+v::f32[3] = f32[1, 0, -1]
+u::f32[2] = f32[1, 2]
+print A @ v
+print u @ A
+print v @ v
+print v · v
+print f32[1, 2, 3] · f32[4, 5, 6]
+
+# '' is the same as ' (there are no complex numbers).
+print A'' == A'
+
+# The identity changes nothing.
+print A @ eye(3) == A
+
+# Batches: leading axes broadcast like the elementwise operators.
+X := reshape(arange(8), 2, 2, 2)
+Y::f32[2, 2] = f32[[0, 1], [1, 0]]
+print X @ Y
+print Y @ X
+
+# Compound assignment keeps the shape and the type of the variable.
+var P::f32[2, 2] = f32[[1, 2], [3, 4]]
+P @= f32[[0, 1], [1, 0]]
+print P
+P .*= f32[[2, 2], [2, 2]]
+print P
+P ./= f32[[4, 4], [4, 4]]
+print P
+
+# A transposed view shares the storage of the original.
+var Q::f32[2, 2] = f32[[1, 2], [3, 4]]
+R := Q'
+Q[0, 1] = 9.0
+print R
+print Q

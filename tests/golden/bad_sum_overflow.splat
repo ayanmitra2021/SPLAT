@@ -1,0 +1,4 @@
+# Phase 14: integer sums are checked; the error names the term where a brute-force loop would fail.
+print "summing..."
+total := ∑[i in 0..100000] i * i
+print total

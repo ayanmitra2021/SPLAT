@@ -255,7 +255,7 @@ public sealed partial class Parser
         var start = Cur;
 
         // Statement-form call without parentheses: `print "Got {val}", x`.
-        if (start.Kind == TokenKind.Ident && CommandNames.Contains(start.Text) && StartsCommandArgument(PeekTok()))
+        if (start.Kind == TokenKind.Ident && CommandNames.Contains(start.Text) && StartsCommandArgument(PeekTok(), PeekTok(2)))
         {
             Advance();
             var args = new List<Arg>();
@@ -304,10 +304,13 @@ public sealed partial class Parser
     /// an expression as an operator (a literal, a name, <c>!</c>, <c>&amp;</c> or <c>~</c>). Anything else (including
     /// <c>(</c>, <c>[</c>, <c>-</c>) is parsed as an ordinary expression, so parenthesised calls always work.
     /// </summary>
-    private static bool StartsCommandArgument(Token t) =>
-        !t.NewlineBefore && t.SpaceBefore && t.Kind is
+    private static bool StartsCommandArgument(Token t, Token next) =>
+        !t.NewlineBefore && t.SpaceBefore && (t.Kind is
             TokenKind.String or TokenKind.Int or TokenKind.Float or TokenKind.Char or TokenKind.Temporal or TokenKind.Ident or TokenKind.True
-            or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde;
+            or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde
+            // Milestone 3: the math words start an expression too (`print sum(v)`, `print ∑[i in 0..3] i`), and so does a norm `print ||v||`.
+            or TokenKind.Sum or TokenKind.Prod or TokenKind.Intg or TokenKind.Grad
+            || (t.Kind == TokenKind.Pipe && next.Kind == TokenKind.Pipe && !next.SpaceBefore && !next.NewlineBefore));
 
     // ---- ret / rip ----
 
@@ -833,7 +836,7 @@ public sealed partial class Parser
     /// </summary>
     private Expr ParseArmBody()
     {
-        if (Cur.Kind == TokenKind.Ident && CommandNames.Contains(Cur.Text) && StartsCommandArgument(PeekTok()))
+        if (Cur.Kind == TokenKind.Ident && CommandNames.Contains(Cur.Text) && StartsCommandArgument(PeekTok(), PeekTok(2)))
         {
             var name = Advance();
             var arg = ParseExpr();

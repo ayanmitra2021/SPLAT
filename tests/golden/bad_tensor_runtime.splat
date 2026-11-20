@@ -1,0 +1,7 @@
+# Phase 12: a bad index is a runtime error with a span; output before it still appears.
+M::f32[2, 3] = zeros(2, 3)
+print "before"
+print M[1, 2]
+i := 3
+print M[0, i]
+print "after"

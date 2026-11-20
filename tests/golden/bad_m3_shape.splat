@@ -1,0 +1,5 @@
+# Milestone 3 acceptance: the compile-time shape error, before any output.
+print "this must not print"
+A::f32[3, 4] = zeros(3, 4)
+B::f32[5, 2] = zeros(5, 2)
+C := A @ B

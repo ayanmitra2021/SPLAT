@@ -202,6 +202,16 @@ public static class Types
         FileT, SocketT, ServerT, JsonT, DateT, TimeT, StampT, DurT, CalT,
     }.ToDictionary(t => t.Name, StringComparer.Ordinal);
 
+    // Phase 12 (CRUMPLE groundwork, spec 4.1 and 13.0.3): element-only types. They exist only inside tensor types such as `bf16[3, 4]`
+    // or `u4[64]`; a scalar of one of these types lives in an f32 / u8 / i8. `bf16` is a SEPARATE type from `f16` (it accumulates in f32).
+    public static readonly NativeSType Bf16T = new("bf16"), U1T = new("u1"), U2T = new("u2"), U4T = new("u4"), I4T = new("i4");
+
+    public static readonly IReadOnlyDictionary<string, NativeSType> TensorOnlyElems = new[] { Bf16T, U1T, U2T, U4T, I4T }
+        .ToDictionary(t => t.Name, StringComparer.Ordinal);
+
+    /// <summary>Element types whose tensors the runtime can store and compute with today (f16, f32, f64).</summary>
+    public static bool IsRuntimeTensorElem(SType t) => t is PrimType { Kind: Prim.F16 or Prim.F32 or Prim.F64 };
+
     public static bool IsTemporalPoint(SType t) => ReferenceEquals(t, DateT) || ReferenceEquals(t, TimeT) || ReferenceEquals(t, StampT);
     public static bool IsTemporal(SType t) => IsTemporalPoint(t) || ReferenceEquals(t, DurT) || ReferenceEquals(t, CalT);
 
@@ -279,6 +289,8 @@ public static class Types
                 return ImplementsTrait(actual, te);
             case (IterSType a, IterSType e):
                 return Compatible(a.Elem, e.Elem);
+            case (TensorSType a, TensorSType e):
+                return Shapes.Compatible(a, e);
             default:
                 return actual.Equals(expected);
         }
@@ -330,6 +342,9 @@ public static class Types
             case SetSType s: return s.Elem;
             case MapSType m: return new TupleSType([m.Key, m.Val]);
             case IterSType i: return i.Elem;
+            // Milestone 3: a tensor yields its rows (axis 0) as views; a vector yields scalars.
+            case TensorSType { Rank: 1 } v: return v.Elem;
+            case TensorSType { Rank: > 1 } m: return m.WithDims(m.Dims.Skip(1).ToList());
             case ClassSType c:
                 foreach (var up in c.Chain())
                     foreach (var tr in up.Info.Traits)
@@ -356,8 +371,13 @@ public static class Types
         ClassSType c when c.Args.Count > 0 => new ClassSType(c.Info, c.Args.Select(a => Substitute(a, map)).ToList()),
         TraitSType tr when tr.Args.Count > 0 => new TraitSType(tr.Info, tr.Args.Select(a => Substitute(a, map)).ToList()),
         IterSType it => new IterSType(Substitute(it.Elem, map)),
+        TensorSType ts => new TensorSType(Substitute(ts.Elem, map), ts.Dims.Select(d => SubstituteDim(d, map)).ToList()),
         _ => t,
     };
+
+    /// <summary>A <c>$Name</c> dimension is replaced when the map holds a <see cref="DimBindingSType"/> under its name.</summary>
+    private static SDim SubstituteDim(SDim d, IReadOnlyDictionary<string, SType> map) =>
+        Shapes.R(d) is VarSDim v && map.TryGetValue(v.Name, out var s) && s is DimBindingSType b ? b.Dim : d;
 
     /// <summary>Follows bound inference variables; unbound ones become <c>any</c>.</summary>
     public static SType Resolve(SType t) => t switch
@@ -374,6 +394,7 @@ public static class Types
         ClassSType c when c.Args.Count > 0 => new ClassSType(c.Info, c.Args.Select(Resolve).ToList()),
         TraitSType tr when tr.Args.Count > 0 => new TraitSType(tr.Info, tr.Args.Select(Resolve).ToList()),
         IterSType it => new IterSType(Resolve(it.Elem)),
+        TensorSType ts => Shapes.Resolve(new TensorSType(Resolve(ts.Elem), ts.Dims)),
         _ => t,
     };
 
@@ -452,6 +473,7 @@ public static class Types
                 return ImplementsTrait(Resolve(actual), (TraitSType)Resolve(e));
             }
             case (IterSType e, IterSType a): return Unify(e.Elem, a.Elem);
+            case (TensorSType e, TensorSType a): return Shapes.UnifyTypes(e, a);
             default:
                 return Compatible(actual, expected);
         }
@@ -477,6 +499,7 @@ public static class Types
         MapSType m => IsEquatable(m.Key) && IsEquatable(m.Val),
         EnumInstanceSType mi => mi.Args.All(IsEquatable),
         NativeSType n => IsTemporal(n),
+        TensorSType => true, // whole-tensor equality: same shape and every element equal
         _ => t.IsAny || t.IsError,
     };
 
@@ -491,6 +514,28 @@ public sealed class TypeInfo
     private readonly Dictionary<BinaryExpr, CallExpr> _pipes = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<CallExpr, int[]> _argMaps = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<CallExpr, IReadOnlyList<SType>> _typeArgs = new(ReferenceEqualityComparer.Instance);
+
+    // Milestone 3: `f32[[1, 2], [3, 4]]` (an element-type name indexed by one list literal) is a tensor literal, and an
+    // expression whose static shape had a `?` where the context needs a known size gets a run-time shape guard.
+    private readonly Dictionary<IndexExpr, ListLiteral> _tensorLits = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Expr, TensorSType> _guards = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ReduceExpr, bool> _pureReductions = new(ReferenceEqualityComparer.Instance);
+
+    internal void SetTensorLiteral(IndexExpr e, ListLiteral lit) => _tensorLits[e] = lit;
+    internal void SetGuard(Expr e, TensorSType expected) => _guards[e] = expected;
+    internal void SetPureReduction(ReduceExpr e, bool pure) => _pureReductions[e] = pure;
+
+    /// <summary>For <c>f32[[1, 2], [3, 4]]</c>: the list literal that holds the elements.</summary>
+    public ListLiteral? TensorLiteral(IndexExpr e) => _tensorLits.GetValueOrDefault(e);
+
+    /// <summary>The shape an expression must have at run time (it was only known up to <c>?</c> at check time), or null.</summary>
+    public TensorSType? Guard(Expr e) => _guards.Count == 0 ? null : _guards.GetValueOrDefault(e);
+
+    /// <summary>True when any shape guards were recorded (lets the interpreter skip the lookup in the common case).</summary>
+    public bool HasGuards => _guards.Count > 0;
+
+    /// <summary>Whether the body of a <c>∑</c>/<c>∏</c> is provably pure (spec 13.6.1: Phase 30 lowers only pure bodies to a closed form).</summary>
+    public bool IsPureReduction(ReduceExpr e) => _pureReductions.GetValueOrDefault(e);
 
     internal void Set(Expr e, SType t) => _types[e] = t;
     internal void SetFn(FnDecl d, FuncSType t) => _cooks[d] = t;

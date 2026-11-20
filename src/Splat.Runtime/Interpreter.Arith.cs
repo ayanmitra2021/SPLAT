@@ -32,8 +32,10 @@ public sealed partial class Interpreter
     private Value Binary(TokenKind op, Value a, Value b, SourceSpan span)
     {
         if (a.Kind == VKind.Object) return ObjectBinary(op, a, b, span);
+        if (a.Kind == VKind.Tensor || b.Kind == VKind.Tensor) return TensorBinary(op, a, b, span);
         if (a.IsTemporal || b.IsTemporal) return TemporalBinary(op, a, b, span);
         if (a.IsInt) return IntBinary(op, a, b, span);
+        if (a.IsFloat && b.IsInt && op == TokenKind.StarStar) return Value.Float(a.Kind, Transcendentals.Current.Pow(a.AsDouble, (double)b.AsInt128));
         if (a.IsFloat) return FloatBinary(op, a, b, span);
 
         switch (a.Kind)
@@ -150,6 +152,13 @@ public sealed partial class Interpreter
     {
         var tk = (VKind)(int)target.Kind;
         if (target.Kind == Prim.Txt) return Value.Str(Formatter.Display(v));
+        if (v.Kind == VKind.Tensor)
+        {
+            // f64(A): the same shape, every element converted (rounded to the new precision).
+            var src = v.AsTensor;
+            var to = ElemOfType(target);
+            return to == src.Elem ? v : Value.OfTensor(Tensor.FromDoubles(to, (long[])src.Shape.Clone(), src.ToDoubles()));
+        }
         if (v.Kind == tk) return v;
 
         if (target.Kind == Prim.Char)

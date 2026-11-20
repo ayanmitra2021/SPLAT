@@ -1,0 +1,37 @@
+# Phase 14: adaptive Gauss-Kronrod integration (1D-3D) and quasi-Monte Carlo above that.
+s::f64 = ∫[0.0..3.141592653589793] |x| sin(x)
+print "{s:.9}"
+
+# The ASCII spelling is the same node.
+s2::f64 = intg[0.0..3.141592653589793] |x| sin(x)
+print s == s2
+
+# The Gaussian integral over the whole line is sqrt(pi).
+g::f64 = ∫[-8.0..8.0] |x| exp(-x * x)
+print "{g:.9}"
+
+# Polynomials are exact to rounding error.
+p::f64 = ∫[0.0..2.0] |x| x * x * x
+print "{p:.9}"
+
+# A reversed interval flips the sign.
+r::f64 = ∫[1.0..0.0] |x| x
+print "{r:.9}"
+
+# A tolerance can be given as a named argument.
+t::f64 = ∫[0.0..1.0, tol = 1e-12] |x| 1.0 / (1.0 + x * x)
+print "{t:.10}"
+
+# Two and three dimensions nest the 1D rule.
+a::f64 = ∫[0.0..1.0, 0.0..2.0] |x, y| x * y
+print "{a:.9}"
+c::f64 = ∫[0.0..1.0, 0.0..1.0, 0.0..1.0] |x, y, z| x + y + z
+print "{c:.9}"
+
+# Above three dimensions: quasi-Monte Carlo over a Halton sequence (about three digits).
+q::f64 = ∫[0.0..1.0, 0.0..1.0, 0.0..1.0, 0.0..1.0, 0.0..1.0, 0.0..1.0] |a, b, c, d, e, f| a * a + b * b + c * c + d * d + e * e + f * f
+print "{q:.2}"
+
+# An f32 integral computes in double but rounds the answer to f32.
+f::f32 = ∫[0.0..1.0] |x| x
+print f

@@ -1,0 +1,13 @@
+# Phase 14: compile-time problems in the math syntax.
+print "this never prints"
+a := ||5 > 3||
+b := ∑[i in 0..3] "x"
+c := ∑[i in 3.5] i
+d := ∫[0..1] |x| x
+e := ∫[0.0..1.0] |x, y| x
+f := ∫[0.0..1.0, step = 2] |x| x
+g := sqrt(4)
+h := 2 ** -1
+i := max(1, 2.0)
+j := mean([1, 2])
+k := ||"txt"||

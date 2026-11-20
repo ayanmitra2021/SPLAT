@@ -1,0 +1,40 @@
+# Phase 14: sums and products over a range, with ASCII and Unicode spellings.
+print ∑[i in 1..=10] i
+print sum[i in 1..=10] i
+print ∏[i in 1..=5] i
+print prod[i in 1..=5] i
+
+# An empty range gives the identity of the operation.
+print ∑[i in 0..0] i
+print ∏[i in 3..3] i
+print ∑[i in 5..2] 1.5
+
+# The result type follows the body: an integer sum is an integer, a float sum is a float.
+n := ∑[i in 0..5] i * i
+x := ∑[i in 0..4] f64(i) * 0.5
+print n
+print x
+
+# Indexing tensors inside the body.
+v := f32[1, 2, 3, 4]
+w := f32[5, 6, 7, 8]
+print ∑[i in 0..4] v[i] * w[i]
+print v · w
+print ∏[i in 0..4] v[i]
+M::f32[2, 2] = f32[[1, 2], [3, 4]]
+print ∑[i in 0..2] M[i, i]
+print ∑[i in 0..2] ∑[j in 0..2] M[i, j]
+
+# Sums over other iterables, with steps and in reverse.
+print ∑[i in 0..10 by 3] i
+print ∑[x in [10, 20, 30]] x
+print ∑[x in f32[0.5, 1.5]] x
+print ∑[i in rev(0..4)] i * 10
+
+# Wider integers.
+big::i64 = ∑[i in 0..100000] i * i
+print big
+
+# Sums of floats accumulate pairwise, so a long sum of one tenth is not the naive loop's answer.
+tenth := ∑[i in 0..1000000] 0.1
+print "{tenth:.3}"

@@ -35,6 +35,8 @@ public sealed partial class Interpreter
         NamedType n => n.Name,
         TupleType => "tuple",
         FuncType => "fn",
+        // The same key Tensor.BaseKey gives a receiver: element type and rank, no dimensions ("f32[,]").
+        TensorType tt => (tt.Element is NamedType en ? en.Name : "?") + "[" + new string(',', Math.Max(0, tt.Dims.Count - 1)) + "]",
         _ => "tensor",
     };
 
@@ -488,15 +490,8 @@ public sealed partial class Interpreter
         CheckAlive(ci, me.Target);
         var rhs = a.Op == TokenKind.Assign ? EvalOwned(a.Value, env) : Eval(a.Value, env);
         ci.Fields.TryGetValue(me.Name, out var cur);
-        var next = a.Op switch
-        {
-            TokenKind.Assign => rhs,
-            TokenKind.PlusAssign => Binary(TokenKind.Plus, cur, rhs, a.Span),
-            TokenKind.MinusAssign => Binary(TokenKind.Minus, cur, rhs, a.Span),
-            TokenKind.StarAssign => Binary(TokenKind.Star, cur, rhs, a.Span),
-            TokenKind.SlashAssign => Binary(TokenKind.Slash, cur, rhs, a.Span),
-            _ => throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")),
-        };
+        var next = a.Op == TokenKind.Assign ? rhs
+            : Binary(BaseOpOf(a.Op) ?? throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")), cur, rhs, a.Span);
         if (a.Op == TokenKind.Assign && cur.Kind == VKind.Object && ReferenceEquals(cur.AsObj.Owner, ci)
             && !(next.Kind == VKind.Object && ReferenceEquals(next.Ref, cur.Ref)))
             Destroy(cur.AsObj, a.Span);

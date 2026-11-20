@@ -1,0 +1,14 @@
+# Phase 13: the matrix product checked at compile time (spec section 9).
+print "this never prints"
+A::f32[3, 4] = zeros(3, 4)
+B::f32[5, 2] = zeros(5, 2)
+E::f32[2, 4] = zeros(2, 4)
+v::f32[4] = zeros(4)
+bad := A @ B
+fixable := A @ E
+vec := v @ B
+fn gram(X::f32[$N, $F])::f32[$F, $F] = X @ X
+batch := zeros(2, 3, 4) @ zeros(5, 4, 2)
+solve := A \ v
+dot := v · zeros(5)
+plain := 1 @ 2

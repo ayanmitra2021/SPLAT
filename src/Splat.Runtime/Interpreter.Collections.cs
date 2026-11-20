@@ -19,6 +19,7 @@ public sealed partial class Interpreter
 
     private static Value Own(Expr e, Value v)
     {
+        if (v.Kind == VKind.Tensor) return IsFreshTensor(e) ? v : Value.OfTensor(v.AsTensor.Clone());
         if (v.Kind is not (VKind.List or VKind.Set or VKind.Map or VKind.Tuple or VKind.Enum)) return v;
         return IsFresh(e) ? v : DeepClone(v);
     }
@@ -52,6 +53,8 @@ public sealed partial class Interpreter
                 return Value.Tuple(v.AsTuple.Select(DeepClone).ToArray());
             case VKind.Enum:
                 return v.AsEnum.PayloadCount == 0 ? v : Value.Enum(new EnumValue(v.AsEnum.EnumName, v.AsEnum.VariantName, v.AsEnum.Payloads.Select(DeepClone).ToArray()));
+            case VKind.Tensor:
+                return Value.OfTensor(v.AsTensor.Clone());
             default:
                 return v;
         }
@@ -112,7 +115,9 @@ public sealed partial class Interpreter
 
     private Value EvalIndex(IndexExpr ix, Env env)
     {
+        if (_info.TensorLiteral(ix) is { } lit && _info.TypeOf(ix) is TensorSType lt) return EvalTensorList(lit, lt, env);
         var target = Eval(ix.Target, env);
+        if (target.Kind == VKind.Tensor) return TensorIndex(target.AsTensor, ix, env);
         var idx = Eval(ix.Indices[0], env);
         switch (target.Kind)
         {
@@ -158,6 +163,7 @@ public sealed partial class Interpreter
     private void ExecIndexAssign(AssignStmt a, IndexExpr ix, Env env)
     {
         var target = Eval(ix.Target, env);
+        if (target.Kind == VKind.Tensor) { ExecTensorAssign(a, ix, target.AsTensor, env); return; }
         var idx = Eval(ix.Indices[0], env);
         var rhs = a.Op == TokenKind.Assign ? EvalOwned(a.Value, env) : Eval(a.Value, env);
 
@@ -180,15 +186,8 @@ public sealed partial class Interpreter
         throw Fail(Templates.Internal(ix.Span, $"cannot assign into {target.TypeName}"));
     }
 
-    private Value Combine(AssignStmt a, Value current, Value rhs) => a.Op switch
-    {
-        TokenKind.Assign => rhs,
-        TokenKind.PlusAssign => Binary(TokenKind.Plus, current, rhs, a.Span),
-        TokenKind.MinusAssign => Binary(TokenKind.Minus, current, rhs, a.Span),
-        TokenKind.StarAssign => Binary(TokenKind.Star, current, rhs, a.Span),
-        TokenKind.SlashAssign => Binary(TokenKind.Slash, current, rhs, a.Span),
-        _ => throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")),
-    };
+    private Value Combine(AssignStmt a, Value current, Value rhs) => a.Op == TokenKind.Assign ? rhs
+        : Binary(BaseOpOf(a.Op) ?? throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")), current, rhs, a.Span);
 
     // ---- methods of the built-in collections ----
 
@@ -204,6 +203,14 @@ public sealed partial class Interpreter
 
         var recv = Eval(m.Target, env);
         if (recv.Kind == VKind.Object) return CallObjectMethod(c, m, recv, env);
+        if (recv.Kind == VKind.Tensor && m.Name is "shape" or "len" && FindUserMethod(recv, m.Name) is null)
+        {
+            var tt = recv.AsTensor;
+            if (m.Name == "len") return Value.Int(VKind.Usize, tt.Rank == 0 ? 1 : tt.Shape[0]);
+            var dims = new SplatList();
+            foreach (var d in tt.Shape) dims.Items.Add(Value.Int(VKind.Usize, d));
+            return Value.List(dims);
+        }
         if (recv.IsTemporal || recv.Kind is VKind.Date or VKind.Time or VKind.Stamp)
         {
             if (FindUserMethod(recv, m.Name) is null) return TemporalMethod(recv, m.Name, c.Span);
@@ -312,6 +319,7 @@ public static class ValueEquality
             case VKind.F16 or VKind.F32 or VKind.F64: return a.AsDouble == b.AsDouble; // NaN is not equal to itself
             case VKind.Bool or VKind.Char or VKind.Date or VKind.Time or VKind.Stamp or VKind.Dur or VKind.Cal: return a.Bits == b.Bits;
             case VKind.Object: return ReferenceEquals(a.Ref, b.Ref);
+            case VKind.Tensor: return Tensor.ValuesEqual(a.AsTensor, b.AsTensor);
             case VKind.Unit: return true;
             case VKind.Txt: return string.Equals(a.AsString, b.AsString, StringComparison.Ordinal);
             case VKind.Tuple:

@@ -1,0 +1,7 @@
+[SE00307] 📉 MATH SAYS NO [Line 3]: The integrand returned NaN at (-0.9491079123427585). NaN and infinity have no area under them.
+  --> bad_integral_nan.splat:3:10
+   |
+ 3 | r::f64 = ∫[-1.0..1.0] |x| sqrt(x)
+   |          ^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Check the operands before the operation.
+

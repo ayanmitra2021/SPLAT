@@ -1,0 +1,47 @@
+# Milestone 3 acceptance: tensors, shape checking, linear algebra and the math syntax, in one program.
+# (The compile-time shape error is checked separately: appending the line `C := zeros(3, 4) @ zeros(5, 2)` must stop the
+#  whole program before it prints anything.)
+
+# ---- Phase 12: tensors ----
+A::f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+print "A ="
+print A
+print A.shape()
+print A .+ f32[10, 20, 30]
+print A[:, 1]
+loop row in A:
+    print sum(row)
+;
+
+var T::f32[2, 2] = zeros(2, 2)
+T[0, 1] = 5.0
+T[1, :] = f32[7, 8]
+print T
+
+# ---- Phase 13: products, transpose, solve, generic shapes ----
+G := A @ A'
+print G
+fn gram(X::f32[$N, $F])::f32[$F, $F] = X' @ X
+print gram(A)
+
+M::f64[2, 2] = f64[[4, 1], [1, 3]]
+b::f64[2] = f64[1, 2]
+x := M \ b
+print ||M @ x - b|| < 1e-9
+
+extend f32[$R, $C]:
+    fn frob_sq(self)::f32 = ||self||_F ** 2
+;
+print f32[[3, 0], [0, 4]].frob_sq()
+
+# ---- Phase 14: norms, reductions, integrals ----
+print ||f32[3, 4]||
+print ∑[i in 1..=100] i
+print ∏[i in 1..=6] i
+print sum(A) + f32(∑[i in 0..3] i)
+
+pi_ish::f64 = 3.141592653589793
+area::f64 = ∫[0.0..pi_ish] |t| sin(t)
+print "{area:.8}"
+vol::f64 = ∫[0.0..1.0, 0.0..1.0, 0.0..1.0] |p, q, r| p * q * r
+print "{vol:.8}"

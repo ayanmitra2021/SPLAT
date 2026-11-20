@@ -1,0 +1,7 @@
+[SE00403] 📍 OUT OF BOUNDS [Line 6]: Index 3 is not in [0, 3). The tensor axis 1 does not go that far.
+  --> bad_tensor_runtime.splat:6:12
+   |
+ 6 | print M[0, i]
+   |            ^
+  Fix: Use an index in 0..3, or check the length first.
+

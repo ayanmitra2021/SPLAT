@@ -1,0 +1,7 @@
+[SE00104] 📐 GEOMETRY CRIME [Line 5]: Tried to '@' a 'f32[3, 4]' with a 'f32[5, 2]'. 4 != 5. Even in parallel universes, these matrices cannot hug.
+  --> bad_m3_shape.splat:5:6
+   |
+ 5 | C := A @ B
+   |      ^^^^^
+  Fix: The inner dimensions must match: left has 4, right has 5.
+

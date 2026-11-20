@@ -1,0 +1,34 @@
+# Phase 13: generic `$` dimensions, instantiated per call site, and `extend` on a tensor type.
+fn gram(X::f32[$N, $F])::f32[$F, $F] = X' @ X
+
+fn add_same(a::f32[$N], b::f32[$N])::f32[$N] = a + b
+
+fn scale_rows(M::f32[$R, $C], s::f32[$R])::f32[$R, $C] = M .* reshape(s, len(s), 1)
+
+fn first_col(M::f32[$R, $C])::f32[$R] = M[:, 0]
+
+print gram(f32[[1, 2], [3, 4], [5, 6]])
+print gram(f32[[1, 2, 3]])
+print add_same(f32[1, 2, 3], f32[4, 5, 6])
+print add_same(f32[1], f32[2])
+print scale_rows(f32[[1, 2], [3, 4]], f32[10, 100])
+print first_col(f32[[1, 2], [3, 4], [5, 6]])
+print first_col(f32[[7, 8, 9]])
+
+# `extend` binds $R and $C per receiver.
+extend f32[$R, $C]:
+    fn frob_sq(self)::f32 = ||self||_F ** 2
+    fn rows(self)::usize = len(self)
+    fn gram_of(self)::f32[$C, $C] = self' @ self
+;
+
+M::f32[2, 2] = f32[[3, 0], [0, 4]]
+print M.frob_sq()
+print M.rows()
+print f32[[1, 2, 3], [4, 5, 6]].rows()
+print f32[[1, 2], [3, 4]].gram_of()
+
+# A `?` dimension is checked when it meets a slot that needs a known size.
+fn count(n::usize)::f32[?] = ones(n)
+fn needs_three(v::f32[3])::f32 = sum(v)
+print needs_three(count(3))

@@ -19,6 +19,15 @@ public static class Templates
         + (suggestTranspose ? " Tip: Transpose with \"'\"?" : ""),
         $"The inner dimensions must match: left has {k1}, right has {k2}.");
 
+    /// <summary>
+    /// A shape problem other than the matrix product (broadcasting, reshape, index, solve). Same category and code as
+    /// <see cref="ShapeMismatch"/>; the caller writes the sentence after the headline.
+    /// </summary>
+    public static Diagnostic GeometryCrime(SourceSpan span, string problem, string fix) => new(
+        DiagnosticCategory.ShapeMismatch, span,
+        $"📐 GEOMETRY CRIME [{Where(span)}]: {problem}",
+        fix);
+
     public static Diagnostic TypeMismatch(SourceSpan span, string found, string expected) => new(
         DiagnosticCategory.TypeMismatch, span,
         $"🎭 IDENTITY CRISIS [Line {span.Line}]: Tried to shove a '{found}' into a '{expected}' slot. I'm strictly typed, bestie.",
@@ -186,9 +195,10 @@ public static class Templates
 
     // ---- Phase 5: runtime ----
 
-    public static Diagnostic IntegerOverflow(SourceSpan span, string type, string op) => new(
+    public static Diagnostic IntegerOverflow(SourceSpan span, string type, string op, string? detail = null) => new(
         DiagnosticCategory.IntegerOverflow, span,
-        $"💣 OVERFLOW [{Where(span)}]: '{op}' pushed a '{type}' past its limits. Integers have edges, and you found one.",
+        $"💣 OVERFLOW [{Where(span)}]: '{op}' pushed a '{type}' past its limits. Integers have edges, and you found one."
+        + (detail is null ? "" : " " + detail),
         "Use a wider type (for example i64), or check the operands first. SPLAT integer arithmetic is checked, never wrapping.");
 
     public static Diagnostic Panic(SourceSpan span, string message, IReadOnlyList<string>? trace) => new(
@@ -233,9 +243,9 @@ public static class Templates
         $"💤 DEAD END [Line {span.Line}]: This 'pick' arm can never be reached. An earlier arm already covered all matching cases.",
         "Remove the unreachable arm, or reorder the arms.", Severity.Warning);
 
-    public static Diagnostic IndexOutOfRange(SourceSpan span, long index, long length) => new(
+    public static Diagnostic IndexOutOfRange(SourceSpan span, long index, long length, string noun = "list") => new(
         DiagnosticCategory.IndexOutOfRange, span,
-        $"📍 OUT OF BOUNDS [{Where(span)}]: Index {index} is not in [0, {length}). The list does not go that far.",
+        $"📍 OUT OF BOUNDS [{Where(span)}]: Index {index} is not in [0, {length}). The {noun} does not go that far.",
         $"Use an index in 0..{length}, or check the length first.");
 
     public static Diagnostic ImmutableMutation(SourceSpan span, string name) => new(

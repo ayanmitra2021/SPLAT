@@ -449,6 +449,7 @@ public sealed partial class TypeChecker
         EnumInstanceSType e => e.Base.EnumName,
         ListSType => "List", SetSType => "Set", MapSType => "Map", TupleSType => "tuple",
         RangeSType => "range", FuncSType => "fn", IterSType => "iter",
+        TensorSType ts => ts.BaseKey,
         _ => t.Name,
     };
 
@@ -505,6 +506,12 @@ public sealed partial class TypeChecker
                 return ts.Info.Method(name) is { } tm && Sig(tm, ts.Substitute) is { } tsig ? new MethodHit(tm, tsig) : null;
             default:
             {
+                // `extend f32[$R, $C]`: bind the block's `$R`, `$C` to the receiver's own dimensions (per-receiver shape instantiation).
+                if (recv is TensorSType rt)
+                    foreach (var ext in _enums.Extensions())
+                        if (ext.Target is TensorSType et && ext.Method(name) is { } tmeth && TryBindReceiver(et, rt, out var dimMap)
+                            && Sig(tmeth, t => Types.Resolve(Types.Substitute(t, dimMap))) is { } ts2)
+                            return new MethodHit(tmeth, ts2);
                 foreach (var ext in _enums.Extensions())
                     if (!ext.Target.IsError && ext.Method(name) is { } em && SameType(recv, ext.Target) && Sig(em, Id) is { } es)
                         return new MethodHit(em, es);

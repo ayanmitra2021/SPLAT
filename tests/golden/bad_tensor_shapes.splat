@@ -1,0 +1,17 @@
+# Phase 12: shape problems the checker catches before anything runs.
+print "this never prints"
+A::f32[3, 4] = zeros(3, 4)
+B::f32[5] = zeros(5)
+C::f32[2, 4] = zeros(2, 4)
+D::f64[3, 4] = zeros(3, 4)
+x := A .+ B
+y := A + C
+z := A * A
+w := A / A
+v := A .+ D
+u := A < C
+t::f32[3, 3] = A
+s := A[1, 2, 3]
+r := f32[[1, 2], [3]]
+q := reshape(A, 5, 5)
+p := A[0.5]
