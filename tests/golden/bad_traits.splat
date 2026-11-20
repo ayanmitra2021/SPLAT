@@ -1,0 +1,24 @@
+trait Walker:
+    fn walk(self)::txt
+;
+trait Swimmer:
+    fn move(self)::txt = "swim"
+;
+trait Flyer:
+    fn move(self)::txt = "fly"
+;
+class Rock with Walker:
+;
+class Duck with Swimmer, Flyer:
+;
+class Fish with Swimmer, Flyer:
+    fn move(self)::txt = "wiggle"
+;
+fn needs<T: Walker>(x::T)::txt = x.walk()
+print needs(Fish())
+extend txt:
+    fn dup(self)::txt = self
+;
+extend txt:
+    fn dup(self)::txt = self + self
+;

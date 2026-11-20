@@ -1,0 +1,20 @@
+class A:
+    x::i32
+;
+class Base:
+    n::i32
+    fn init(self, n::i32):
+        self.n = n
+    ;
+    fn go(self, a::i32)::i32 = a
+;
+class Child from Base:
+    fn init(self):
+        print "no super"
+    ;
+    fn go(self, a::txt)::i32 = 1
+    fn op %(self, o::Child)::Child = self
+;
+r := A()
+r.nothing()
+r.x = 3

@@ -1,0 +1,65 @@
+# Phase 11: local HTTP server and client in one process, TCP echo, UDP datagram
+fn handler(req::Req)::Res:
+    if req.path == "/hello":
+        ret Res.ok("hello from SPLAT")
+    ;
+    if req.path == "/echo":
+        ret Res.ok("{req.method}:{req.body}")
+    ;
+    if req.path == "/q":
+        ret Res.json("\{\"name\": \"{req.query["name"]}\"}")
+    ;
+    if req.path == "/boom":
+        ret Res.ok("{10 / (len(req.body) - len(req.body))}")
+    ;
+    ret Res.not_found("nothing at {req.path}")
+;
+
+srv := serve(0, handler)
+port := srv.port()
+base := "http://127.0.0.1:{port}"
+print fetch("{base}/hello")
+print post("{base}/echo", "payload")
+print fetch("{base}/q?name=ayan")
+print load_json(fetch("{base}/q?name=zed"))["name"]
+
+try:
+    fetch("{base}/missing")
+catch e:
+    print e.kind
+;
+try:
+    fetch("{base}/boom")
+catch e:
+    print "server error surfaced: {e.kind}"
+;
+
+download("{base}/hello", "m2_download_tmp.txt")
+print read("m2_download_tmp.txt")
+delete("m2_download_tmp.txt")
+srv.stop()
+
+try:
+    fetch("{base}/hello")
+catch e:
+    print "after stop: {e.kind}"
+;
+
+# TCP echo within one program
+listener := Socket.listen(0)
+client := Socket.tcp("127.0.0.1", listener.port())
+conn := listener.accept()
+client.send("ping")
+msg := conn.recv()
+print "server got {msg}"
+conn.send("echo:{msg}")
+print client.recv()
+client.close()
+conn.close()
+listener.close()
+
+# UDP datagram
+a := Socket.udp(0)
+b := Socket.udp(0)
+b.send_to("127.0.0.1", a.port(), "datagram")
+print a.recv()

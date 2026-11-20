@@ -22,6 +22,11 @@ public sealed class Symbol
     internal bool Checked { get; set; }
     internal bool InProgress { get; set; }
 
+    // Method-only data (Phases 8-9).
+    internal SType? SelfType { get; init; }
+    internal ClassInfo? ClassCtx { get; init; }
+    internal ParamKind SelfKind { get; init; }
+
     internal Symbol(string name, SymbolKind kind, SType? type, bool mutable, SourceSpan declared)
     {
         Name = name; Kind = kind; Type = type; IsMutable = mutable; Declared = declared;
@@ -51,7 +56,7 @@ public sealed class Scope
 /// any side effects. Infers bind types, enforces annotations, arithmetic/comparison/boolean typing, function
 /// signatures and return types. Never throws: problems go to the <see cref="DiagnosticEngine"/>.
 /// </summary>
-public sealed class TypeChecker
+public sealed partial class TypeChecker
 {
     private sealed class FnCtx
     {
@@ -128,48 +133,8 @@ public sealed class TypeChecker
     {
         switch (t)
         {
-            case NamedType { Args.Count: 0 } n:
-                if (Types.ByName.TryGetValue(n.Name, out var prim)) return prim;
-                if (_typeParams.Contains(n.Name)) return new TypeParamSType(n.Name);
-                if (_enums.FindEnum(n.Name) is { } bare)
-                {
-                    if (bare.TypeParams.Count > 0)
-                    {
-                        Report(Templates.BadTypeArgs(n.Span, n.Name, bare.TypeParams.Count, 0));
-                        return SType.Error;
-                    }
-                    return new EnumInstanceSType(bare, []);
-                }
-                if (n.Name is "List" or "Set" or "Map")
-                {
-                    Report(Templates.BadTypeArgs(n.Span, n.Name, n.Name == "Map" ? 2 : 1, 0));
-                    return SType.Error;
-                }
-                Report(Templates.UndefinedName(n.Span, n.Name));
-                return SType.Error;
-            case NamedType n:
-            {
-                var args = n.Args.Select(ResolveType).ToList();
-                int arity = n.Name switch { "List" or "Set" => 1, "Map" => 2, _ => _enums.FindEnum(n.Name)?.TypeParams.Count ?? -1 };
-                if (arity < 0)
-                {
-                    if (Types.ByName.ContainsKey(n.Name)) Report(Templates.BadTypeArgs(n.Span, n.Name, 0, n.Args.Count));
-                    else Report(Templates.UndefinedName(n.Span, n.Name));
-                    return SType.Error;
-                }
-                if (arity != args.Count)
-                {
-                    Report(Templates.BadTypeArgs(n.Span, n.Name, arity, args.Count));
-                    return SType.Error;
-                }
-                return n.Name switch
-                {
-                    "List" => new ListSType(args[0]),
-                    "Set" => CheckedSet(args[0], n.Args[0].Span),
-                    "Map" => CheckedMap(args[0], args[1], n.Args[0].Span),
-                    _ => new EnumInstanceSType(_enums.FindEnum(n.Name)!, args),
-                };
-            }
+            case NamedType nn:
+                return ResolveNamed(nn);
             case TupleType tup:
                 return new TupleSType(tup.Items.Select(ResolveType).ToList());
             case TensorType tt:
@@ -193,8 +158,10 @@ public sealed class TypeChecker
     {
         // Functions are hoisted: their signatures are visible to the whole block, so mutual recursion works.
         DeclareEnums(stmts);
+        var typeDecls = DeclareTypes(stmts, scope);
         foreach (var s in stmts)
             if (s is FnDecl d) DeclareFn(d, scope);
+        ValidateTypes(typeDecls);
 
         bool returns = false;
         for (int i = 0; i < stmts.Count; i++)
@@ -250,6 +217,11 @@ public sealed class TypeChecker
             case LoopStmt sp: return CheckLoop(sp, scope);
             case EnumDecl: return false; // declared (hoisted) before the block was checked
             case TupleBindStmt tb: CheckTupleBind(tb, scope); return false;
+            case ClassDecl cd: CheckClassBodies(cd); return false;
+            case TraitDecl td: CheckTraitBodies(td); return false;
+            case ExtendDecl ed: CheckExtendBodies(ed); return false;
+            case DropStmt dr: CheckDrop(dr, scope); return false;
+            case TryStmt ty: return CheckTry(ty, scope);
             default: return false; // ReservedStmt / ErrorStmt: the parser already reported them
         }
     }
@@ -284,10 +256,10 @@ public sealed class TypeChecker
 
         if (a.Target is not NameExpr name)
         {
-            if (a.Target is IndexExpr aix) CheckIndexAssign(a, aix, scope);
-            else if (a.Target is MemberExpr) NotYet(a.Target.Span, "assigning to a field", 8);
-            else Report(Templates.NotAssignable(a.Target.Span));
-            if (a.Target is not IndexExpr) Infer(a.Value, scope);
+            if (a.Target is IndexExpr aix) { CheckIndexAssign(a, aix, scope); return; }
+            if (a.Target is MemberExpr fme) { CheckFieldAssign(a, fme, scope); return; }
+            Report(Templates.NotAssignable(a.Target.Span));
+            Infer(a.Value, scope);
             return;
         }
 
@@ -364,6 +336,7 @@ public sealed class TypeChecker
             case LoopKind.In:
             {
                 var st = Infer(sp.Subject!, scope);
+                RequireStep(sp.Subject!, st);
                 SType elem = SType.Error;
                 if (ElementOf(st) is { } e) elem = e;
                 else if (st.IsAny) elem = SType.Any;
@@ -396,16 +369,7 @@ public sealed class TypeChecker
     /// The one notion of "iterable" in the checker: the element type a value yields in <c>loop</c>, <c>then</c> chains and
     /// <c>in</c>, or null when the type cannot be iterated. Later phases add lists, sets, maps and tensors here.
     /// </summary>
-    private static SType? ElementOf(SType t) => t switch
-    {
-        RangeSType r => r.Elem,
-        ChainSType c => c.Elem,
-        PrimType { Kind: Prim.Txt } => Types.Char, // a txt yields one char per Unicode scalar
-        ListSType l => l.Elem,
-        SetSType s => s.Elem,
-        MapSType m => new TupleSType([m.Key, m.Val]),
-        _ => null,
-    };
+    private static SType? ElementOf(SType t) => Types.ElementOf(t);
 
     /// <summary>The value of an integer literal (optionally negated), if the expression is one.</summary>
     private static bool TryConstInt(Expr e, out Int128 value)
@@ -425,6 +389,9 @@ public sealed class TypeChecker
             switch (s)
             {
                 case BreakStmt: return true;
+                case TryStmt ty:
+                    if (ContainsBreak(ty.Body.Statements) || ContainsBreak(ty.Handler.Statements)) return true;
+                    break;
                 case IfStmt h:
                     if (h.Branches.Any(b => ContainsBreak(b.Body.Statements)) || (h.Else is not null && ContainsBreak(h.Else.Statements))) return true;
                     break;
@@ -440,20 +407,19 @@ public sealed class TypeChecker
     {
         if (d.OpSymbol is not null)
         {
-            NotYet(d.Span, $"operator overload '{d.OpSymbol}'", 8);
+            Report(Templates.UnexpectedToken(d.Span, $"fn op {d.OpSymbol}", "an operator overload inside a class or extend block"));
             return;
         }
 
-        var outerParams = _typeParams;
-        _typeParams = new HashSet<string>(outerParams, StringComparer.Ordinal);
-        foreach (var g in d.Generics) _typeParams.Add(g.Name);
+        var saved = PushGenerics(d.Generics);
+        var genv = CurrentGenerics();
 
         var ptypes = new List<SType>();
         foreach (var p in d.Params)
         {
             if (p.Kind != ParamKind.Normal)
             {
-                NotYet(p.Span, "'self' parameters", 8);
+                Report(Templates.SelfOutside(p.Span, "self"));
                 ptypes.Add(SType.Error);
                 continue;
             }
@@ -468,7 +434,7 @@ public sealed class TypeChecker
         SType? ret = d.ReturnType is not null ? ResolveType(d.ReturnType)
             : d.BlockBody is not null ? Types.Unit
             : null; // `fn f(x) = expr` with no annotation: inferred from the body
-        _typeParams = outerParams;
+        PopGenerics(saved);
 
         var sym = new Symbol(d.Name, SymbolKind.Function, ret is null ? null : new FuncSType(ptypes, ret), false, d.Span)
         {
@@ -476,13 +442,13 @@ public sealed class TypeChecker
             DeclScope = scope,
             ParamTypes = ptypes,
         };
-        // Generic parameters stay visible while the body is checked.
-        _genericScopes[d] = d.Generics.Select(g => g.Name).ToList();
+        // Generic parameters (and their bounds) stay visible while the body is checked.
+        _fnGeneric[d] = genv;
+        var declBounds = d.Generics.Where(g => genv.Bounds.ContainsKey(g.Name)).Select(g => (g.Name, genv.Bounds[g.Name])).ToList();
+        if (declBounds.Count > 0) _declBounds[d] = declBounds;
         if (sym.Type is FuncSType ft) _info.SetFn(d, ft);
         Declare(scope, sym, d.Span);
     }
-
-    private readonly Dictionary<FnDecl, List<string>> _genericScopes = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>Checks a function body at most once (on demand when another function needs an inferred return type).</summary>
     private void EnsureChecked(Symbol sym)
@@ -500,20 +466,33 @@ public sealed class TypeChecker
         var outerFn = _fn;
         int outerLoop = _loopDepth;
         var outerParams = _typeParams;
-        _typeParams = new HashSet<string>(outerParams, StringComparer.Ordinal);
-        foreach (var g in _genericScopes.GetValueOrDefault(d) ?? []) _typeParams.Add(g);
+        var outerBounds = _typeBounds;
+        var outerClass = _curClass;
+        var outerMethod = _curMethod;
+        if (_fnGeneric.TryGetValue(d, out var genv)) { _typeParams = genv.Params; _typeBounds = genv.Bounds; }
+        _curClass = sym.ClassCtx;
+        _curMethod = sym.SelfType is null ? null : sym;
 
         var scope = new Scope(sym.DeclScope);
         var ptypes = sym.ParamTypes!;
-        for (int i = 0; i < d.Params.Count; i++)
+        int pi = 0;
+        foreach (var p in d.Params)
         {
-            var p = d.Params[i];
+            if (p.Kind != ParamKind.Normal)
+            {
+                // `self`: writable only through ~self (and in init/deinit).
+                bool writable = p.Kind == ParamKind.PokeSelf || d.Name is "init" or "deinit";
+                Declare(scope, new Symbol("self", SymbolKind.Variable, sym.SelfType ?? SType.Error, writable, p.Span), p.Span);
+                continue;
+            }
+            var ptype = pi < ptypes.Count ? ptypes[pi] : SType.Error;
+            pi++;
             if (p.Default is not null)
             {
-                var dt = Infer(p.Default, sym.DeclScope!, ptypes[i]);
-                if (!Types.Compatible(dt, ptypes[i])) Mismatch(p.Default.Span, dt, ptypes[i]);
+                var dt = Infer(p.Default, sym.DeclScope!, ptype);
+                if (!Types.Compatible(dt, ptype)) Mismatch(p.Default.Span, dt, ptype);
             }
-            Declare(scope, new Symbol(p.Name, SymbolKind.Variable, ptypes[i], false, p.Span), p.Span);
+            Declare(scope, new Symbol(p.Name, SymbolKind.Variable, ptype, false, p.Span), p.Span);
         }
 
         _loopDepth = 0;
@@ -542,6 +521,9 @@ public sealed class TypeChecker
         _fn = outerFn;
         _loopDepth = outerLoop;
         _typeParams = outerParams;
+        _typeBounds = outerBounds;
+        _curClass = outerClass;
+        _curMethod = outerMethod;
     }
 
     /// <summary>Resolves a function symbol's type, checking its body first when the return type is being inferred.</summary>
@@ -601,7 +583,8 @@ public sealed class TypeChecker
             case PickExpr pk: return CheckPick(pk, scope, hint);
             case PostfixExpr p: return NotYet(p.Span, "transpose", 13);
             case FullSlice fs: return NotYet(fs.Span, "slicing", 12);
-            case MemberExpr m: return NotYet(m.Span, "member access", 8);
+            case MemberExpr m: return CheckMember(m, scope);
+            case TemporalLiteral tl: return TemporalType(tl);
             case NormExpr nm: return NotYet(nm.Span, "norms", 14);
             case DerivExpr dv: return NotYet(dv.Span, "'∂'", 15);
             case IntegExpr ig: return NotYet(ig.Span, "'∫'", 14);
@@ -632,6 +615,7 @@ public sealed class TypeChecker
             if (part is not TemplateExpr te) continue;
             var t = Infer(te.Value, scope);
             if (te.Format is null || te.Format.Length == 0) continue;
+            if (CheckTemporalFormat(te, t)) continue;
             if (!FormatSpec.TryParse(te.Format, out var spec, out var err))
             {
                 Report(Templates.BadFormat(te.Span, te.Format, err!));
@@ -648,13 +632,28 @@ public sealed class TypeChecker
 
     private SType CheckName(NameExpr n, Scope scope, SType? hint = null)
     {
-        if (n.Name is "self" or "super") return NotYet(n.Span, $"'{n.Name}'", 8);
+        if (n.Name == "self")
+        {
+            if (scope.Lookup("self") is { } selfSym) return selfSym.Type ?? SType.Error;
+            Report(Templates.SelfOutside(n.Span, "self"));
+            return SType.Error;
+        }
+        if (n.Name == "super")
+        {
+            Report(Templates.UnexpectedToken(n.Span, "super", "'super.method(...)' ('super' is not a value on its own)"));
+            return SType.Error;
+        }
         var sym = scope.Lookup(n.Name);
         if (sym is null && _enums.FindVariant(n.Name) is { } variantRef) return CheckVariantName(variantRef, hint, n.Span);
         if (sym is null)
         {
-            if (Prelude.IsBuiltin(n.Name)) return NotYet(n.Span, $"using '{n.Name}' as a value", 10);
-            if (Types.ByName.ContainsKey(n.Name)) return NotYet(n.Span, $"using the conversion '{n.Name}' as a value", 10);
+            if (_enums.FindClass(n.Name) is not null)
+            {
+                Report(Templates.UnexpectedToken(n.Span, n.Name, $"a call such as {n.Name}(...); class names are not first-class values"));
+                return SType.Error;
+            }
+            if (Prelude.IsBuiltin(n.Name)) return NotYet(n.Span, $"using '{n.Name}' as a value", 12);
+            if (Types.ByName.ContainsKey(n.Name)) return NotYet(n.Span, $"using the conversion '{n.Name}' as a value", 12);
             Report(Templates.UndefinedName(n.Span, n.Name));
             return SType.Error;
         }
@@ -756,13 +755,18 @@ public sealed class TypeChecker
         MapSType m => ContainsError(m.Key) || ContainsError(m.Val),
         TupleSType tu => tu.Items.Any(ContainsError),
         EnumInstanceSType mi => mi.Args.Any(ContainsError),
+        ClassSType c => c.Args.Any(ContainsError),
+        TraitSType tr => tr.Args.Any(ContainsError),
+        IterSType it => ContainsError(it.Elem),
         _ => false,
     };
 
     private SType ArithmeticType(TokenKind op, SType l, SType r, SourceSpan span, string opText)
     {
         if (ContainsError(l) || ContainsError(r)) return SType.Error;
+        if (l is ClassSType && TryOverload(op, l, r, span, out var overloaded)) return overloaded;
         if (l.IsAny || r.IsAny) return l.IsAny ? r : l;
+        if (Types.IsTemporal(l) || Types.IsTemporal(r)) return TemporalArithmetic(op, l, r, span, opText);
         if (!l.Equals(r)) return BadPair(span, opText, l, r);
         if (Types.IsNumeric(l)) return l;
         if (op == TokenKind.Plus && l.Equals(Types.Txt)) return Types.Txt;
@@ -790,8 +794,12 @@ public sealed class TypeChecker
                 Infer(b.Left, scope); Infer(b.Right, scope);
                 return NotYet(b.Span, "'>>' layer composition", 16);
             case TokenKind.At or TokenKind.Backslash or TokenKind.MiddleDot:
-                Infer(b.Left, scope); Infer(b.Right, scope);
+            {
+                var al = Infer(b.Left, scope);
+                var ar = Infer(b.Right, scope, al is ClassSType ? null : al);
+                if (b.Op == TokenKind.At && al is ClassSType && TryOverload(b.Op, al, ar, b.Span, out var ores)) return ores;
                 return NotYet(b.Span, $"'{(b.Op == TokenKind.At ? "@" : b.Op == TokenKind.Backslash ? "\\" : "·")}'", 13);
+            }
             case TokenKind.DotStar or TokenKind.DotSlash or TokenKind.DotPlus or TokenKind.DotMinus:
                 Infer(b.Left, scope); Infer(b.Right, scope);
                 return NotYet(b.Span, "elementwise operators", 12);
@@ -804,6 +812,8 @@ public sealed class TypeChecker
                 var elemHint = hint is RangeSType rs ? rs.Elem : null;
                 var (l, r) = InferPair(b.Left, b.Right, scope, elemHint);
                 if (l.IsError || r.IsError) return SType.Error;
+                if (Types.IsTemporalPoint(l) || Types.IsTemporalPoint(r))
+                    return l.IsAny || r.IsAny ? new RangeSType(SType.Any) : CheckTemporalRange(b, l, r);
                 if (l.IsAny || r.IsAny) return new RangeSType(SType.Any);
                 if (!l.Equals(r)) return BadPair(b.Span, OpText(b.Op), l, r);
                 if (!Types.IsInt(l))
@@ -818,19 +828,24 @@ public sealed class TypeChecker
             {
                 var (l, r) = InferPair(b.Left, b.Right, scope, null);
                 if (ContainsError(l) || ContainsError(r)) return Types.Bool;
+                if (l is ClassSType && TryOverload(b.Op, l, r, b.Span, out var oeq)) return oeq;
                 if (l.IsAny || r.IsAny) return Types.Bool;
                 if (!(l.Equals(r) || (Types.Compatible(l, r) && Types.Compatible(r, l)))) { BadPair(b.Span, OpText(b.Op), l, r); return Types.Bool; }
                 if (!Types.IsEquatable(l))
-                    Report(Templates.BadOperator(b.Span, OpText(b.Op), N(l), N(r), "Only values made of numbers, bool, txt, char, unit, tuples, lists, sets, maps and enums can be compared."));
+                    Report(Templates.BadOperator(b.Span, OpText(b.Op), N(l), N(r), l is ClassSType
+                        ? $"Define 'fn op ==(self, other::{N(l)})::bool' in the class to compare its objects."
+                        : "Only values made of numbers, bool, txt, char, unit, tuples, lists, sets, maps, enums and dates/times can be compared."));
                 return Types.Bool;
             }
 
             case TokenKind.Lt or TokenKind.Le or TokenKind.Gt or TokenKind.Ge:
             {
                 var (l, r) = InferPair(b.Left, b.Right, scope, null);
-                if (l.IsError || r.IsError || l.IsAny || r.IsAny) return Types.Bool;
+                if (l.IsError || r.IsError) return Types.Bool;
+                if (l is ClassSType && b.Op is TokenKind.Lt or TokenKind.Gt && TryOverload(b.Op, l, r, b.Span, out var olt)) return olt;
+                if (l.IsAny || r.IsAny) return Types.Bool;
                 if (!l.Equals(r)) { BadPair(b.Span, OpText(b.Op), l, r); return Types.Bool; }
-                bool ordered = Types.IsNumeric(l) || l.Equals(Types.Txt) || l.Equals(Types.Char);
+                bool ordered = Types.IsNumeric(l) || l.Equals(Types.Txt) || l.Equals(Types.Char) || Types.IsTemporal(l);
                 if (!ordered)
                     Report(Templates.BadOperator(b.Span, OpText(b.Op), N(l), N(r), "Ordering works on numbers, 'txt' and 'char'."));
                 return Types.Bool;
@@ -853,6 +868,7 @@ public sealed class TypeChecker
         var st = Infer(s.Step, scope, elem is PrimType ? elem : null);
         if (rt.IsError || st.IsError) return SType.Error;
         if (elem is null) return SType.Error;
+        if (Types.IsTemporalPoint(elem)) return CheckTemporalStep(s, elem, st);
         if (!Types.Compatible(st, elem)) Mismatch(s.Step.Span, st, elem);
         else if (TryConstInt(s.Step, out var n) && n <= 0)
             Report(Templates.BadStep(s.Step.Span, n.ToString()));
@@ -868,6 +884,7 @@ public sealed class TypeChecker
             // Later parts take the first part's element type, so `0..n then 50..100` agree on integer type.
             var pt = Infer(part, scope, elem is null ? hint : new RangeSType(elem));
             if (pt.IsError) { failed = true; continue; }
+            RequireStep(part, pt);
             var pe = ElementOf(pt);
             if (pe is null)
             {
@@ -988,7 +1005,10 @@ public sealed class TypeChecker
         // Variant constructors: Got(x), Node(l, v, r).
         if (c.Callee is NameExpr vn && scope.Lookup(vn.Name) is null && _enums.FindVariant(vn.Name) is { } vref)
             return CheckConstructorCall(c, vn, vref, scope, hint);
-        // Methods of the built-in collections: xs.push(1).
+        // Class construction: Dog("Rex").
+        if (c.Callee is NameExpr cnm && scope.Lookup(cnm.Name) is null && _enums.FindClass(cnm.Name) is { } cls)
+            return CheckConstruct(c, cnm, cls, scope, hint);
+        // Methods: xs.push(1), d.speak(), super.init(...), Socket.tcp(...).
         if (c.Callee is MemberExpr me) return CheckMethodCall(c, me, scope);
 
         // Conversions and prelude functions: only when no user binding shadows the name.
@@ -1115,6 +1135,7 @@ public sealed class TypeChecker
             }
         }
 
+        if (vars is not null && decl is not null) EnforceBounds(c, decl, vars);
         if (!bad) _info.SetArgMap(c, map);
         if (bad) return SType.Error;
         if (vars is null) return retType;
@@ -1161,10 +1182,25 @@ public sealed class TypeChecker
             }
             var t = Infer(c.Args[0].Value, scope, null);
             _info.Set(name, new FuncSType([t], t));
+            RequireStep(c.Args[0].Value, t);
             if (t.IsError || t.IsAny) return t;
             if (t is RangeSType || t is ListSType) return t;
             Report(Templates.TypeMismatch(c.Args[0].Value.Span, N(t), "a range or List"));
             return SType.Error;
+        }
+
+        if (name.Name == "to_json")
+        {
+            if (c.Args.Count != 1)
+            {
+                foreach (var a in c.Args) Infer(a.Value, scope);
+                Report(Templates.WrongArgCount(c.Span, "to_json", 1, c.Args.Count));
+                return Types.Txt;
+            }
+            var jt = Infer(c.Args[0].Value, scope);
+            _info.Set(name, new FuncSType([jt], Types.Txt));
+            if (jt is FuncSType) Report(Templates.TypeMismatch(c.Args[0].Value.Span, N(jt), "data (a function has no JSON form)"));
+            return Types.Txt;
         }
 
         if (name.Name == "len")
@@ -1191,6 +1227,7 @@ public sealed class TypeChecker
                 return new ListSType(new TupleSType([Types.Usize, SType.Any]));
             }
             var t = Infer(c.Args[0].Value, scope);
+            RequireStep(c.Args[0].Value, t);
             var elem = ElementOf(t) ?? SType.Any;
             _info.Set(name, new FuncSType([t], new ListSType(new TupleSType([Types.Usize, elem]))));
             return new ListSType(new TupleSType([Types.Usize, elem]));
@@ -1206,6 +1243,8 @@ public sealed class TypeChecker
             }
             var t1 = Infer(c.Args[0].Value, scope);
             var t2 = Infer(c.Args[1].Value, scope);
+            RequireStep(c.Args[0].Value, t1);
+            RequireStep(c.Args[1].Value, t2);
             var e1 = ElementOf(t1) ?? SType.Any;
             var e2 = ElementOf(t2) ?? SType.Any;
             _info.Set(name, new FuncSType([t1, t2], new ListSType(new TupleSType([e1, e2]))));
@@ -1411,6 +1450,9 @@ public sealed class TypeChecker
         MapSType m => ContainsAny(m.Key) || ContainsAny(m.Val),
         TupleSType tu => tu.Items.Any(ContainsAny),
         EnumInstanceSType mi => mi.Args.Any(ContainsAny),
+        ClassSType c => c.Args.Any(ContainsAny),
+        TraitSType tr => tr.Args.Any(ContainsAny),
+        IterSType it => ContainsAny(it.Elem),
         _ => false,
     };
 
@@ -1514,6 +1556,21 @@ public sealed class TypeChecker
                 var it = Infer(idx, scope, Types.Usize);
                 if (!it.IsError && !it.IsAny && !Types.IsInt(it)) Report(Templates.TypeMismatch(idx.Span, N(it), "an integer index"));
                 return Types.Char;
+            }
+            case ClassSType cs:
+            {
+                var r = TryIndexOverload(ix, cs, scope);
+                if (r is not null) return r;
+                Infer(idx, scope);
+                Report(Templates.BadOperator(ix.Span, "[]", N(target), null, $"Define 'fn op [](self, i::usize)::T' in '{cs.Info.Name}' to index its objects."));
+                return SType.Error;
+            }
+            case NativeSType { Name: "Json" }:
+            {
+                var it = Infer(idx, scope);
+                if (!it.IsError && !it.IsAny && !Types.IsInt(it) && !it.Equals(Types.Txt))
+                    Report(Templates.TypeMismatch(idx.Span, N(it), "a txt key or an integer index"));
+                return Types.JsonT;
             }
             default:
                 Infer(idx, scope);
@@ -1734,11 +1791,15 @@ public sealed class TypeChecker
         var sym = scope.Lookup(root.Name);
         if (sym is null) return; // already reported as undefined
         if (sym.Kind != SymbolKind.Variable || !sym.IsMutable)
-            Report(Templates.ImmutableMutation(target.Span, root.Name));
+            Report(root.Name == "self" ? Templates.ImmutableSelf(target.Span, _curMethod?.Name ?? "method") : Templates.ImmutableMutation(target.Span, root.Name));
     }
 
     private SType CheckMethodCall(CallExpr c, MemberExpr m, Scope scope)
     {
+        if (m.Target is NameExpr { Name: "super" }) return CheckSuperCall(c, m, scope);
+        if (m.Target is NameExpr tn && scope.Lookup(tn.Name) is null && NativeMembers.StaticsOf(tn.Name) is { } statics)
+            return CheckStaticCall(c, m, tn.Name, statics, scope);
+
         var recv = Infer(m.Target, scope);
         void InferAll() { foreach (var a in c.Args) Infer(a.Value, scope); }
 
@@ -1749,9 +1810,20 @@ public sealed class TypeChecker
         (SType[] Params, SType Ret, bool Mutates)? sig = null;
         switch (recv)
         {
+            case PrimType { Kind: Prim.Txt }:
+                sig = m.Name switch
+                {
+                    "upper" or "lower" or "trim" => ([], Types.Txt, false),
+                    "len" => ([], Types.Usize, false),
+                    "split" => ([Types.Txt], new ListSType(Types.Txt), false),
+                    "lines" => ([], new ListSType(Types.Txt), false),
+                    _ => null,
+                };
+                break;
             case ListSType l:
                 sig = m.Name switch
                 {
+                    "len" => ([], Types.Usize, false),
                     "push" => ([l.Elem], Types.Unit, true),
                     "pop" => ([], EnumRegistry.MaybeOf(l.Elem), true),
                     "insert" => ([Types.Usize, l.Elem], Types.Unit, true),
@@ -1762,6 +1834,7 @@ public sealed class TypeChecker
             case SetSType s:
                 sig = m.Name switch
                 {
+                    "len" => ([], Types.Usize, false),
                     "add" => ([s.Elem], Types.Unit, true),
                     "remove" => ([s.Elem], Types.Bool, true),
                     _ => null,
@@ -1770,18 +1843,28 @@ public sealed class TypeChecker
             case MapSType mp:
                 sig = m.Name switch
                 {
+                    "len" => ([], Types.Usize, false),
                     "remove" => ([mp.Key], EnumRegistry.MaybeOf(mp.Val), true),
                     "get" => ([mp.Key], EnumRegistry.MaybeOf(mp.Val), false),
                     _ => null,
                 };
                 break;
             default:
+            {
+                if (NativeMembers.MethodsOf(recv) is { } nm) return CheckNativeMethod(c, m, recv, nm, scope);
+                var user = CheckUserMethod(c, m, recv, scope);
+                if (user is not null) return user;
                 InferAll();
-                return NotYet(m.Span, "member access", 8);
+                Report(Templates.UndefinedName(m.NameSpan, $"{N(recv)}.{m.Name}"));
+                return SType.Error;
+            }
         }
 
         if (sig is null)
         {
+            // Not a built-in collection method: an `extend List<T>` block may provide it.
+            var ext = CheckUserMethod(c, m, recv, scope);
+            if (ext is not null) return ext;
             InferAll();
             Report(Templates.UndefinedName(m.NameSpan, $"{N(recv)}.{m.Name}"));
             return SType.Error;
@@ -1971,6 +2054,10 @@ public sealed class TypeChecker
                 case LoopStmt sp:
                     if (sp.Subject is not null) ScanExpr(sp.Subject, name);
                     if (sp.Variable != name) CheckNoMutation(sp.Body.Statements, name);
+                    break;
+                case TryStmt ty:
+                    CheckNoMutation(ty.Body.Statements, name);
+                    if (ty.CatchName != name) CheckNoMutation(ty.Handler.Statements, name);
                     break;
             }
         }

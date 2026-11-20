@@ -57,6 +57,21 @@ public enum DiagnosticCategory
     NotHashable,
     BadTypeArgs,
     KeyNotFound,
+    // Phases 8-11: classes, traits, extend, errors, files, time, net
+    SecretAccess,
+    BadOverride,
+    SuperInitRequired,
+    BadOverload,
+    MissingTraitMethods,
+    AmbiguousMember,
+    InheritanceCycle,
+    UninitializedField,
+    SelfOutside,
+    MissingRangeStep,
+    IoError,
+    BadJson,
+    TimeOverflow,
+    NetworkFail,
 }
 
 /// <summary>One compile-time or runtime problem: comedic headline, location, and a technical fix.</summary>

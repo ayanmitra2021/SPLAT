@@ -1,0 +1,7 @@
+[SE00302] 🕵️ DETECTIVE FAIL [Runtime]: Looked everywhere for "definitely_not_here.txt" and found pure emptiness. Fix: Check path or wrap in 'try: ... catch e: ... ;'.
+  --> bad_file_uncaught.splat:2:7
+   |
+ 2 | print read("definitely_not_here.txt")
+   |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Check the path, or wrap the call in 'try: ... catch e: ... ;'.
+

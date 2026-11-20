@@ -1,4 +1,5 @@
 using System.Globalization;
+using Splat.Core;
 using Splat.Semantics;
 
 namespace Splat.Runtime;
@@ -10,6 +11,8 @@ public enum VKind : byte
     Range, Func, Chain,
     // Phase 7: collections and ADTs
     List, Set, Map, Tuple, Enum,
+    // Phases 8-10: class instances and native handles, and the date/time family (payload in Bits).
+    Object, Date, Time, Stamp, Dur, Cal,
 }
 
 /// <summary>
@@ -40,6 +43,9 @@ public readonly struct Value
     public static Value Map(SplatMap map) => new(VKind.Map, 0, map);
     public static Value Tuple(Value[] items) => new(VKind.Tuple, 0, items);
     public static Value Enum(EnumValue ev) => new(VKind.Enum, 0, ev);
+    public static Value Obj(HeapObj o) => new(VKind.Object, 0, o);
+    /// <summary>A date/time value: Date = days since 1970-01-01, Time = ns since midnight, Stamp = UTC ns, Dur = ns, Cal = months.</summary>
+    public static Value Temporal(VKind kind, long bits) => new(kind, bits, null);
 
     /// <summary>A float of the given kind, rounded to that kind's precision.</summary>
     public static Value Float(VKind kind, double d) => new(kind, BitConverter.DoubleToInt64Bits(Round(kind, d)), null);
@@ -61,6 +67,9 @@ public readonly struct Value
     public SplatMap AsMap => (SplatMap)Ref!;
     public Value[] AsTuple => (Value[])Ref!;
     public EnumValue AsEnum => (EnumValue)Ref!;
+    public HeapObj AsObj => (HeapObj)Ref!;
+
+    public bool IsTemporal => Kind is VKind.Date or VKind.Time or VKind.Stamp or VKind.Dur or VKind.Cal;
 
     public bool IsInt => Kind <= VKind.Usize;
     public bool IsUnsigned => Kind is >= VKind.U8 and <= VKind.Usize;
@@ -82,6 +91,8 @@ public readonly struct Value
         VKind.Map => "Map",
         VKind.Tuple => "tuple",
         VKind.Enum => AsEnum.EnumName,
+        VKind.Object => AsObj.TypeName,
+        VKind.Date => "Date", VKind.Time => "Time", VKind.Stamp => "Stamp", VKind.Dur => "Dur", VKind.Cal => "Cal",
         _ => Types.Of((Prim)(int)Kind).Name,
     };
 
@@ -92,7 +103,7 @@ public readonly struct Value
 /// A range <c>lo..hi</c> / <c>lo..=hi</c>, visiting every <see cref="Step"/>-th integer from <c>lo</c>. A reversed range
 /// (<c>rev(...)</c>) visits the same values from the last one back down to the first.
 /// </summary>
-public sealed record RangeData(Value Lo, Value Hi, bool Inclusive, Int128 Step, bool Reversed)
+public sealed record RangeData(Value Lo, Value Hi, bool Inclusive, Int128 Step, bool Reversed, bool Months = false)
 {
     /// <summary>How many values the range visits.</summary>
     public Int128 Count
@@ -109,17 +120,48 @@ public sealed record RangeData(Value Lo, Value Hi, bool Inclusive, Int128 Step, 
     public IEnumerable<Value> Items()
     {
         var kind = Lo.Kind;
+        if (Months)
+        {
+            // Calendar steps compute element k as start + k*step, so month-end clamping never drifts.
+            var all = MonthItems();
+            if (!Reversed) { foreach (var v in all) yield return v; yield break; }
+            foreach (var v in Enumerable.Reverse(all)) yield return v;
+            yield break;
+        }
         Int128 lo = Lo.AsInt128, n = Count;
         for (Int128 k = 0; k < n; k++)
             yield return Value.FromInt128(kind, lo + (Reversed ? n - 1 - k : k) * Step);
     }
 
-    /// <summary>True when <paramref name="x"/> is one of the values the range visits (on the step grid, within the bounds).</summary>
-    public bool Contains(Int128 x)
+    /// <summary>Element <paramref name="k"/> of a calendar-stepped range, or null when it leaves the representable calendar.</summary>
+    private Value? MonthAt(long k)
     {
-        Int128 lo = Lo.AsInt128, hi = Hi.AsInt128;
-        if (x < lo || (Inclusive ? x > hi : x >= hi)) return false;
-        return (x - lo) % Step == 0;
+        long months;
+        try { months = checked((long)Step * k); } catch (OverflowException) { return null; }
+        if (Lo.Kind == VKind.Date)
+            return Temporal.TryDateAddMonths(Lo.Bits, months, out long d) ? Value.Temporal(VKind.Date, d) : null;
+        return Temporal.TryStampAddMonths(Lo.Bits, months, out long ns) ? Value.Temporal(VKind.Stamp, ns) : null;
+    }
+
+    private List<Value> MonthItems()
+    {
+        var list = new List<Value>();
+        for (long k = 0; k < 1_000_000; k++)
+        {
+            if (MonthAt(k) is not { } v) break;
+            if (Inclusive ? v.Bits > Hi.Bits : v.Bits >= Hi.Bits) break;
+            list.Add(v);
+        }
+        return list;
+    }
+
+    /// <summary>True when <paramref name="x"/> is one of the values the range visits (on the step grid, within the bounds).</summary>
+    public bool Contains(Value x)
+    {
+        Int128 lo = Lo.AsInt128, hi = Hi.AsInt128, v = x.AsInt128;
+        if (v < lo || (Inclusive ? v > hi : v >= hi)) return false;
+        if (Months) return MonthItems().Any(i => i.Bits == x.Bits);
+        return (v - lo) % Step == 0;
     }
 }
 
@@ -202,7 +244,8 @@ public sealed class ValueKeyComparer : IEqualityComparer<Value>
         {
             VKind.Txt => string.Equals(a.AsString, b.AsString, StringComparison.Ordinal),
             VKind.Tuple => a.AsTuple.Length == b.AsTuple.Length && a.AsTuple.Zip(b.AsTuple).All(p => Equals(p.First, p.Second)),
-            _ when (int)a.Kind <= (int)VKind.Usize || a.Kind is VKind.Bool or VKind.Char => a.Bits == b.Bits,
+            _ when (int)a.Kind <= (int)VKind.Usize || a.Kind is VKind.Bool or VKind.Char or VKind.Date or VKind.Time or VKind.Stamp => a.Bits == b.Bits,
+            VKind.Object => ReferenceEquals(a.Ref, b.Ref),
             _ => false,
         };
     }
@@ -211,7 +254,8 @@ public sealed class ValueKeyComparer : IEqualityComparer<Value>
     {
         VKind.Txt => v.AsString.GetHashCode(StringComparison.Ordinal),
         VKind.Tuple => v.AsTuple.Aggregate(0, (h, x) => HashCode.Combine(h, GetHashCode(x))),
-        _ when (int)v.Kind <= (int)VKind.Usize || v.Kind is VKind.Bool or VKind.Char => v.Bits.GetHashCode(),
+        _ when (int)v.Kind <= (int)VKind.Usize || v.Kind is VKind.Bool or VKind.Char or VKind.Date or VKind.Time or VKind.Stamp => v.Bits.GetHashCode(),
+        VKind.Object => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(v.Ref),
         _ => 0,
     };
 }
@@ -239,6 +283,12 @@ public static class Formatter
         VKind.Range => RangeText(v.AsRange),
         VKind.Func => "<fn>",
         VKind.Chain => string.Join(" then ", v.AsChain.Select(Display)),
+        VKind.Object => v.AsObj.Display(),
+        VKind.Date => Temporal.LocaleDate(v.Bits, Temporal.Locale.Default),
+        VKind.Time => Temporal.IsoTime(v.Bits),
+        VKind.Stamp => Temporal.LocaleStamp(v.Bits, Temporal.Locale.Default),
+        VKind.Dur => Temporal.DurText(v.Bits),
+        VKind.Cal => Temporal.CalText(v.Bits),
         VKind.List => "[" + string.Join(", ", v.AsList.Items.Select(Display)) + "]",
         VKind.Set => "set{" + string.Join(", ", v.AsSet.Items.Select(Display)) + "}",
         VKind.Map => "map{" + string.Join(", ", v.AsMap.Items.Select(p => Display(p.Key) + ": " + Display(p.Val))) + "}",
@@ -253,7 +303,10 @@ public static class Formatter
     private static string RangeText(RangeData r)
     {
         var text = $"{Display(r.Lo)}{(r.Inclusive ? "..=" : "..")}{Display(r.Hi)}";
-        if (r.Step != 1) text += $" by {r.Step}";
+        if (r.Months) text += $" by {Temporal.CalText((long)r.Step)}";
+        else if (r.Lo.Kind == VKind.Date) { if (r.Step != 1) text += $" by {Temporal.DurText((long)r.Step * Temporal.NsPerDay)}"; }
+        else if (r.Lo.IsTemporal) text += $" by {Temporal.DurText((long)r.Step)}";
+        else if (r.Step != 1) text += $" by {r.Step}";
         return r.Reversed ? $"rev({text})" : text;
     }
 
@@ -278,6 +331,31 @@ public static class Formatter
         };
         // 3 prints as "3.0" so a float never looks like an int.
         return s.Any(c => c is '.' or 'E' or 'e') ? s : s + ".0";
+    }
+
+    /// <summary>Renders a date/time with <c>{x:iso}</c> or a <c>%Y-%m-%d</c>-style pattern.</summary>
+    public static string FormatTemporal(Value v, string format)
+    {
+        long days = v.Kind switch
+        {
+            VKind.Date => v.Bits,
+            VKind.Stamp => Temporal.FloorDiv(v.Bits, Temporal.NsPerDay),
+            _ => 0,
+        };
+        long tod = v.Kind switch
+        {
+            VKind.Time => v.Bits,
+            VKind.Stamp => Temporal.FloorMod(v.Bits, Temporal.NsPerDay),
+            _ => 0,
+        };
+        if (format == "iso")
+            return v.Kind switch
+            {
+                VKind.Date => Temporal.IsoDate(v.Bits),
+                VKind.Time => Temporal.IsoTime(v.Bits),
+                _ => Temporal.IsoStamp(v.Bits),
+            };
+        return Temporal.TryFormatPattern(format, days, tod, out var text, out _) ? text : format;
     }
 
     public static string Format(Value v, FormatSpec spec)

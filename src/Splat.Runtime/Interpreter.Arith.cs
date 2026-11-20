@@ -31,6 +31,8 @@ public sealed partial class Interpreter
 
     private Value Binary(TokenKind op, Value a, Value b, SourceSpan span)
     {
+        if (a.Kind == VKind.Object) return ObjectBinary(op, a, b, span);
+        if (a.IsTemporal || b.IsTemporal) return TemporalBinary(op, a, b, span);
         if (a.IsInt) return IntBinary(op, a, b, span);
         if (a.IsFloat) return FloatBinary(op, a, b, span);
 

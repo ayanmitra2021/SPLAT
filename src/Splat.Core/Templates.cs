@@ -262,4 +262,81 @@ public static class Templates
         DiagnosticCategory.NotHashable, span,
         $"🎲 NOT A KEY [{Where(span)}]: '{type}' cannot be a Map or Set key. Only integers, char, txt, bool and tuples thereof are hashable.",
         "Use a hashable key type (i32, txt, char, bool, or a tuple of those).");
+
+    // ---- Phases 8-11: classes, traits, extend, errors, I/O, time, net ----
+
+    public static Diagnostic SecretAccess(SourceSpan span, string member, string owner) => new(
+        DiagnosticCategory.SecretAccess, span,
+        $"🔒 ACCESS DENIED [Line {span.Line}]: '{member}' is secret to '{owner}', and you are not on the guest list.",
+        $"Use a public member of '{owner}', or move this code inside '{owner}'.");
+
+    public static Diagnostic BadOverride(SourceSpan span, string method, string detail) => new(
+        DiagnosticCategory.BadOverride, span,
+        $"🧬 GENETIC MISMATCH [Line {span.Line}]: '{method}' overrides a parent method but {detail}.",
+        "An override must keep the parent's parameter types and return a compatible type.");
+
+    public static Diagnostic SuperInitRequired(SourceSpan span, string cls, string parent) => new(
+        DiagnosticCategory.SuperInitRequired, span,
+        $"👪 PARENTAL CONSENT [Line {span.Line}]: '{parent}' cannot be born without arguments, so '{cls}.init' has to introduce itself with 'super.init(...)'.",
+        $"Call 'super.init(...)' with the arguments '{parent}.init' needs, or give those parameters defaults.");
+
+    public static Diagnostic BadOverload(SourceSpan span, string symbol) => new(
+        DiagnosticCategory.BadOverload, span,
+        $"🎭 OPERATOR IMPERSONATOR [Line {span.Line}]: '{symbol}' is not an operator you can overload.",
+        "Overloadable operators are: + - * / @ == != < > []");
+
+    public static Diagnostic MissingTraitMethods(SourceSpan span, string type, string trait, string missing) => new(
+        DiagnosticCategory.MissingTraitMethods, span,
+        $"📜 BROKEN PROMISE [Line {span.Line}]: '{type}' signed up for '{trait}' but never wrote: {missing}.",
+        $"Add the missing method(s) ({missing}) to '{type}'.");
+
+    public static Diagnostic AmbiguousMember(SourceSpan span, string name, string first, string second) => new(
+        DiagnosticCategory.AmbiguousMember, span,
+        $"🥊 CUSTODY BATTLE [Line {span.Line}]: '{name}' is provided by both {first} and {second}, and I refuse to pick a favourite.",
+        $"Define '{name}' yourself to settle it (an explicit override wins), or remove one of the providers.");
+
+    public static Diagnostic InheritanceCycle(SourceSpan span, string cls) => new(
+        DiagnosticCategory.InheritanceCycle, span,
+        $"♾️ FAMILY TREE KNOT [Line {span.Line}]: '{cls}' ends up as its own ancestor. Genealogists are weeping.",
+        $"Break the 'from' chain so '{cls}' does not inherit from itself.");
+
+    public static Diagnostic UninitializedField(SourceSpan span, string cls, string field) => new(
+        DiagnosticCategory.UninitializedField, span,
+        $"🥚 UNHATCHED FIELD [Line {span.Line}]: field '{field}' of '{cls}' has no default and 'init' never sets it.",
+        $"Give '{field}' a default ('{field}::T = ...') or assign 'self.{field} = ...' in 'init'.");
+
+    public static Diagnostic SelfOutside(SourceSpan span, string word) => new(
+        DiagnosticCategory.SelfOutside, span,
+        $"🪞 WHO AM I [Line {span.Line}]: '{word}' only exists inside a method of a class, trait or extend block.",
+        $"Move this code into a method, or pass the object as an ordinary parameter.");
+
+    public static Diagnostic ImmutableSelf(SourceSpan span, string method) => new(
+        DiagnosticCategory.ImmutableMutation, span,
+        $"🧊 ICE BREAKER [{Where(span)}]: '{method}' takes a plain 'self', so it may look at the object but not change it.",
+        $"Declare it as 'fn {method}(~self ...)' (a poke) if it needs to change fields.");
+
+    public static Diagnostic MissingRangeStep(SourceSpan span, string type) => new(
+        DiagnosticCategory.MissingRangeStep, span,
+        $"⏱️ STEP REQUIRED [Line {span.Line}]: A range of '{type}' needs 'by'; a {type} has no natural step.",
+        "Add a step, for example 'by 15m' (Time), 'by 1h' (Stamp).");
+
+    public static Diagnostic IoError(SourceSpan span, string what, string detail) => new(
+        DiagnosticCategory.IoError, span,
+        $"💾 DISK DRAMA [{Where(span)}]: {what}: {detail}",
+        "Check permissions, the path and the mode, or wrap the call in 'try: ... catch e: ... ;'.");
+
+    public static Diagnostic BadJson(SourceSpan span, string detail) => new(
+        DiagnosticCategory.BadJson, span,
+        $"🧾 JSON JAM [{Where(span)}]: {detail}",
+        "Check the JSON text (quotes, commas, brackets), or wrap the call in 'try: ... catch e: ... ;'.");
+
+    public static Diagnostic TimeOverflow(SourceSpan span, string detail) => new(
+        DiagnosticCategory.TimeOverflow, span,
+        $"⌛ TIME OUT OF JOINT [{Where(span)}]: {detail}",
+        "Keep dates between years 1 and 9999 and timestamps near 1678-2262; use 'wrap_time' to wrap past midnight.");
+
+    public static Diagnostic NetworkFail(SourceSpan span, string target, string detail) => new(
+        DiagnosticCategory.NetworkFail, span,
+        $"📡 NO SIGNAL [{Where(span)}]: Could not talk to {target}: {detail}",
+        "Check the address and that something is listening, or wrap the call in 'try: ... catch e: ... ;'.");
 }

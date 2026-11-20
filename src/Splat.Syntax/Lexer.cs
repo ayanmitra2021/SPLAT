@@ -234,6 +234,7 @@ public sealed class Lexer
         string word = _text[start.._pos];
 
         if (word == "c" && Cur == '"') return ScanChar(start);
+        if (word is "d" or "t" or "tm" && Cur == '"') return ScanTemporalString(start, word);
         if (Keywords.TryGetValue(word, out var kind)) return Make(kind, start);
         return Make(TokenKind.Ident, start, word);
     }
@@ -286,6 +287,26 @@ public sealed class Lexer
             else value = ParseInteger(clean, 10, start, "");
         }
 
+        // '500ms', '15m', '1mo': an integer glued to exactly one of the duration suffixes is a Dur or Cal literal.
+        if (kind == TokenKind.Int && _pos < _end && char.IsAsciiLetter(_text[_pos]) && !_text[start..].StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+            && !_text[start..].StartsWith("0b", StringComparison.OrdinalIgnoreCase))
+        {
+            int p = _pos;
+            while (p < _end && (char.IsLetterOrDigit(_text[p]) || _text[p] == '_')) p++;
+            string suffix = _text[_pos..p];
+            ulong n = (ulong)value;
+            if (Temporal.DurUnit(suffix) is { } nsPer)
+            {
+                _pos = p;
+                return TemporalNumber(start, TemporalKind.Dur, n, nsPer);
+            }
+            if (Temporal.CalUnit(suffix) is { } months)
+            {
+                _pos = p;
+                return TemporalNumber(start, TemporalKind.Cal, n, months);
+            }
+        }
+
         // '12abc', '0b102', '1_000x': a number must not run straight into a word or digit.
         if (_pos < _end && (char.IsLetterOrDigit(_text[_pos]) || _text[_pos] == '_'))
         {
@@ -296,6 +317,48 @@ public sealed class Lexer
                 $"Remove '{_text[junkStart.._pos]}', or put a space between the number and what follows."));
         }
         return Make(kind, start, value);
+    }
+
+    private Token TemporalNumber(int start, TemporalKind kind, ulong n, long unit)
+    {
+        long v = 0;
+        try { v = checked((long)n * unit); if (n > long.MaxValue) throw new OverflowException(); }
+        catch (OverflowException)
+        {
+            Report(Templates.BadLiteral(_src.Span(start, _pos - start), "That duration is longer than the universe has been around (it overflows 64 bits).", "Use a smaller number or a bigger unit."));
+        }
+        return Make(TokenKind.Temporal, start, new TemporalValue(kind, v));
+    }
+
+    /// <summary>d"2024-03-01", tm"09:30:00" and t"2024-03-01T10:15:00Z": ISO text between plain quotes, validated here.</summary>
+    private Token ScanTemporalString(int start, string prefix)
+    {
+        _pos++; // opening quote
+        int bodyStart = _pos;
+        while (_pos < _end && _text[_pos] != '"' && _text[_pos] != '\n') _pos++;
+        if (_pos >= _end || _text[_pos] != '"')
+        {
+            Report(Templates.UnterminatedString(_src.Span(start, 1)));
+            return Make(TokenKind.Temporal, start, new TemporalValue(TemporalKind.Date, 0));
+        }
+        string body = _text[bodyStart.._pos];
+        _pos++; // closing quote
+        var kind = prefix switch { "d" => TemporalKind.Date, "tm" => TemporalKind.Time, _ => TemporalKind.Stamp };
+        long value = 0;
+        string? problem;
+        bool ok = kind switch
+        {
+            TemporalKind.Date => Temporal.TryParseDate(body, out value, out problem),
+            TemporalKind.Time => Temporal.TryParseTime(body, out value, out problem),
+            _ => Temporal.TryParseStamp(body, out value, out problem),
+        };
+        if (!ok)
+        {
+            Report(Templates.BadLiteral(_src.Span(start, _pos - start), $"{prefix}\"{body}\" is not a real {(kind == TemporalKind.Date ? "date" : kind == TemporalKind.Time ? "time of day" : "timestamp")}: {problem}.",
+                kind == TemporalKind.Date ? "Write dates as d\"yyyy-MM-dd\"." : kind == TemporalKind.Time ? "Write times as tm\"HH:mm:ss\" on a 24-hour clock." : "Write timestamps as t\"yyyy-MM-ddTHH:mm:ssZ\"."));
+            value = 0;
+        }
+        return Make(TokenKind.Temporal, start, new TemporalValue(kind, value));
     }
 
     private static bool IsDigitOfRadix(char c, int radix) => radix == 16 ? Uri.IsHexDigit(c) : c is '0' or '1';

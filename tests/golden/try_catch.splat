@@ -1,0 +1,78 @@
+# Phase 10: try/catch, error values, flow control through try, deinit while unwinding
+class Guard:
+    tag::txt
+    fn init(self, tag::txt):
+        self.tag = tag
+    ;
+    fn deinit(self):
+        print "release {self.tag}"
+    ;
+;
+
+fn risky(n::i32)::i32:
+    g := Guard("risky {n}")
+    ret 100 / n
+;
+
+try:
+    print risky(5)
+    print risky(0)
+    print "unreachable"
+catch e:
+    print "caught {e.kind} ({e.code}) on line {e.line}"
+;
+
+try:
+    xs := [1, 2, 3]
+    print xs[7]
+catch e:
+    print e.kind
+;
+
+try:
+    print read("no_such_file.txt")
+catch e:
+    print "{e.kind}: {len(e.message) > 0}"
+;
+
+fn find(limit::i32)::i32:
+    loop i in 1..100:
+        try:
+            if i * i > limit:
+                ret i
+            ;
+            if i == 3:
+                cont
+            ;
+        catch e:
+            print "never"
+        ;
+    ;
+    ret -1
+;
+print find(50)
+
+var count = 0
+loop i in 0..5:
+    try:
+        if i == 2:
+            br
+        ;
+        count += 1
+    catch e:
+        print "never"
+    ;
+;
+print count
+
+try:
+    try:
+        n := 10 / 0
+    catch inner:
+        print "inner {inner.kind}"
+        k := 5 / 0
+    ;
+catch outer:
+    print "outer {outer.kind}"
+;
+print "done"

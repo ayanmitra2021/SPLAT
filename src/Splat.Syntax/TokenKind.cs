@@ -5,7 +5,7 @@ public enum TokenKind
     EndOfFile,
 
     // Literals and names
-    Ident, Int, Float, String, Char,
+    Ident, Int, Float, String, Char, Temporal,
 
     // Keywords (spec 2.3). `Grad`/`Intg`/`Sum`/`Prod` cover both the ASCII spelling and the Unicode symbol.
     Var, Fn, Return, If, Elif, Else, Loop, Break, Continue, Pick,

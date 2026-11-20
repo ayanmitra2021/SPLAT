@@ -13,6 +13,9 @@ public sealed record TextPart(string Value, SourceSpan Span) : StringPart(Span);
 /// </summary>
 public sealed record ExprPart(string Source, int Offset, SourceSpan Span, string? Format, SourceSpan? FormatSpan) : StringPart(Span);
 
+/// <summary>The decoded value of a <see cref="TokenKind.Temporal"/> token (date, time, stamp, duration or calendar literal).</summary>
+public readonly record struct TemporalValue(TemporalKind Kind, long Value);
+
 /// <summary>
 /// One lexeme. <see cref="Value"/> holds the decoded literal: <c>ulong</c> for Int, <c>double</c> for Float,
 /// <c>int</c> (Unicode scalar) for Char, <c>string</c> for Ident.

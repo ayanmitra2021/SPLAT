@@ -61,6 +61,8 @@ public sealed class RangeSType : SType
 {
     public SType Elem { get; }
     public RangeSType(SType elem) => Elem = elem;
+    /// <summary>True for an unstepped range of <c>Time</c>/<c>Stamp</c>, which has no natural step and cannot be iterated.</summary>
+    public bool NeedsStep { get; init; }
     public override string Name => $"range<{Elem.Name}>";
     public override bool Equals(SType? other) => other is RangeSType r && r.Elem.Equals(Elem);
     public override int GetHashCode() => Name.GetHashCode(StringComparison.Ordinal);
@@ -176,6 +178,8 @@ public sealed class TypeParamSType : SType
 {
     public string ParamName { get; }
     public TypeParamSType(string name) => ParamName = name;
+    /// <summary>The trait this parameter was declared with (<c>T: Talkable</c>), or null. Not part of equality.</summary>
+    public TraitSType? Bound { get; init; }
     public override string Name => ParamName;
     public override bool Equals(SType? other) => other is TypeParamSType tp && tp.ParamName == ParamName;
     public override int GetHashCode() => ParamName.GetHashCode(StringComparison.Ordinal);
@@ -188,6 +192,18 @@ public static class Types
     public static readonly PrimType U8 = new(Prim.U8, "u8"), U16 = new(Prim.U16, "u16"), U32 = new(Prim.U32, "u32"), U64 = new(Prim.U64, "u64"), Usize = new(Prim.Usize, "usize");
     public static readonly PrimType F16 = new(Prim.F16, "f16"), F32 = new(Prim.F32, "f32"), F64 = new(Prim.F64, "f64");
     public static readonly PrimType Bool = new(Prim.Bool, "bool"), Txt = new(Prim.Txt, "txt"), Char = new(Prim.Char, "char"), Unit = new(Prim.Unit, "unit");
+
+    // Phases 8-11: built-in native types.
+    public static readonly NativeSType FileT = new("File"), SocketT = new("Socket"), ServerT = new("Server"), JsonT = new("Json");
+    public static readonly NativeSType DateT = new("Date"), TimeT = new("Time"), StampT = new("Stamp"), DurT = new("Dur"), CalT = new("Cal");
+
+    public static readonly IReadOnlyDictionary<string, NativeSType> NativeByName = new[]
+    {
+        FileT, SocketT, ServerT, JsonT, DateT, TimeT, StampT, DurT, CalT,
+    }.ToDictionary(t => t.Name, StringComparer.Ordinal);
+
+    public static bool IsTemporalPoint(SType t) => ReferenceEquals(t, DateT) || ReferenceEquals(t, TimeT) || ReferenceEquals(t, StampT);
+    public static bool IsTemporal(SType t) => IsTemporalPoint(t) || ReferenceEquals(t, DurT) || ReferenceEquals(t, CalT);
 
     /// <summary>Type names usable in annotations and as conversion functions (<c>f32(x)</c>).</summary>
     public static readonly IReadOnlyDictionary<string, PrimType> ByName = new[]
@@ -254,8 +270,74 @@ public static class Types
                     && a.Args.Zip(e.Args).All(p => Compatible(p.First, p.Second));
             case (EnumSType a, EnumSType e):
                 return a.EnumName == e.EnumName;
+            case (ClassSType a, ClassSType e):
+                foreach (var up in a.Chain())
+                    if (ReferenceEquals(up.Info, e.Info))
+                        return up.Args.Count == e.Args.Count && up.Args.Zip(e.Args).All(p => Compatible(p.First, p.Second));
+                return false;
+            case (_, TraitSType te):
+                return ImplementsTrait(actual, te);
+            case (IterSType a, IterSType e):
+                return Compatible(a.Elem, e.Elem);
             default:
                 return actual.Equals(expected);
+        }
+    }
+
+    // ---- traits and iteration ----
+
+    /// <summary>
+    /// True when <paramref name="actual"/> satisfies the trait: a class that lists it (or inherits it), a parameter bounded
+    /// by it, a type an <c>extend ... with</c> block gave it, or (for <c>Iterable&lt;T&gt;</c>) any built-in iterable.
+    /// </summary>
+    public static bool ImplementsTrait(SType actual, TraitSType expected)
+    {
+        if (actual.IsError || actual.IsAny) return true;
+        bool ArgsOk(IReadOnlyList<SType> given) =>
+            given.Count == expected.Args.Count && given.Zip(expected.Args).All(p => Compatible(p.First, p.Second));
+        switch (actual)
+        {
+            case TraitSType t:
+                return ReferenceEquals(t.Info, expected.Info) && ArgsOk(t.Args);
+            case ClassSType c:
+                foreach (var up in c.Chain())
+                    foreach (var tr in up.Info.Traits)
+                        if (ReferenceEquals(tr.Info, expected.Info) && ArgsOk(((TraitSType)up.Substitute(tr)).Args)) return true;
+                break;
+            case TypeParamSType { Bound: { } b }:
+                if (ReferenceEquals(b.Info, expected.Info) && ArgsOk(b.Args)) return true;
+                break;
+        }
+        if (expected.Info.IsBuiltinIterable)
+            return ElementOf(actual) is { } e && expected.Args.Count == 1 && Compatible(e, expected.Args[0]);
+        foreach (var impl in expected.Info.Impls)
+            if (Equals(impl, actual) || Compatible(actual, impl)) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// The one notion of "iterable" in the checker: the element type a value yields in <c>loop</c>, <c>then</c> chains and
+    /// <c>in</c>, or null when the type cannot be iterated. User classes join through <c>trait Iterable&lt;T&gt;</c>.
+    /// </summary>
+    public static SType? ElementOf(SType t)
+    {
+        switch (t)
+        {
+            case RangeSType r: return r.Elem;
+            case ChainSType c: return c.Elem;
+            case PrimType { Kind: Prim.Txt }: return Char;
+            case ListSType l: return l.Elem;
+            case SetSType s: return s.Elem;
+            case MapSType m: return new TupleSType([m.Key, m.Val]);
+            case IterSType i: return i.Elem;
+            case ClassSType c:
+                foreach (var up in c.Chain())
+                    foreach (var tr in up.Info.Traits)
+                        if (tr.Info.IsBuiltinIterable && ((TraitSType)up.Substitute(tr)).Args is [var e]) return e;
+                return null;
+            case TypeParamSType { Bound: { Info.IsBuiltinIterable: true } b }: return b.Args.Count == 1 ? b.Args[0] : null;
+            case TraitSType { Info.IsBuiltinIterable: true } ts: return ts.Args.Count == 1 ? ts.Args[0] : null;
+            default: return null;
         }
     }
 
@@ -271,6 +353,9 @@ public static class Types
         ChainSType c => new ChainSType(Substitute(c.Elem, map)),
         EnumInstanceSType mi => new EnumInstanceSType(mi.Base, mi.Args.Select(a => Substitute(a, map)).ToList()),
         FuncSType f => new FuncSType(f.Params.Select(p => Substitute(p, map)).ToList(), Substitute(f.Ret, map)),
+        ClassSType c when c.Args.Count > 0 => new ClassSType(c.Info, c.Args.Select(a => Substitute(a, map)).ToList()),
+        TraitSType tr when tr.Args.Count > 0 => new TraitSType(tr.Info, tr.Args.Select(a => Substitute(a, map)).ToList()),
+        IterSType it => new IterSType(Substitute(it.Elem, map)),
         _ => t,
     };
 
@@ -286,6 +371,9 @@ public static class Types
         ChainSType c => new ChainSType(Resolve(c.Elem)),
         EnumInstanceSType mi => new EnumInstanceSType(mi.Base, mi.Args.Select(Resolve).ToList()),
         FuncSType f => new FuncSType(f.Params.Select(Resolve).ToList(), Resolve(f.Ret)),
+        ClassSType c when c.Args.Count > 0 => new ClassSType(c.Info, c.Args.Select(Resolve).ToList()),
+        TraitSType tr when tr.Args.Count > 0 => new TraitSType(tr.Info, tr.Args.Select(Resolve).ToList()),
+        IterSType it => new IterSType(Resolve(it.Elem)),
         _ => t,
     };
 
@@ -336,6 +424,34 @@ public static class Types
                 for (int i = 0; i < e.Params.Count; i++) ok &= Unify(e.Params[i], a.Params[i]);
                 return ok;
             }
+            case (ClassSType e, ClassSType a):
+            {
+                // A subclass argument unifies through the ancestor the parameter names.
+                foreach (var up in a.Chain())
+                {
+                    if (!ReferenceEquals(up.Info, e.Info)) continue;
+                    if (up.Args.Count != e.Args.Count) return false;
+                    bool ok = true;
+                    for (int i = 0; i < e.Args.Count; i++) ok &= Unify(e.Args[i], up.Args[i]);
+                    return ok;
+                }
+                return false;
+            }
+            case (TraitSType e, _) when actual is not TraitSType:
+            {
+                // Passing a class (or anything) where `Trait<T>` is expected: bind T from the trait it declares.
+                if (actual is ClassSType ca)
+                    foreach (var up in ca.Chain())
+                        foreach (var tr in up.Info.Traits)
+                            if (ReferenceEquals(tr.Info, e.Info))
+                            {
+                                var args = ((TraitSType)up.Substitute(tr)).Args;
+                                for (int i = 0; i < e.Args.Count && i < args.Count; i++) Unify(e.Args[i], args[i]);
+                            }
+                if (e.Info.IsBuiltinIterable && ElementOf(actual) is { } elem && e.Args.Count == 1) Unify(e.Args[0], elem);
+                return ImplementsTrait(Resolve(actual), (TraitSType)Resolve(e));
+            }
+            case (IterSType e, IterSType a): return Unify(e.Elem, a.Elem);
             default:
                 return Compatible(actual, expected);
         }
@@ -347,6 +463,7 @@ public static class Types
         PrimType p => p.Kind is not (Prim.F16 or Prim.F32 or Prim.F64 or Prim.Unit),
         TupleSType tu => tu.Items.All(IsHashable),
         TypeParamSType => true, // generic bodies are checked once, before any instantiation
+        NativeSType n => ReferenceEquals(n, DateT) || ReferenceEquals(n, TimeT) || ReferenceEquals(n, StampT),
         _ => t.IsAny || t.IsError,
     };
 
@@ -359,6 +476,7 @@ public static class Types
         SetSType s => IsEquatable(s.Elem),
         MapSType m => IsEquatable(m.Key) && IsEquatable(m.Val),
         EnumInstanceSType mi => mi.Args.All(IsEquatable),
+        NativeSType n => IsTemporal(n),
         _ => t.IsAny || t.IsError,
     };
 

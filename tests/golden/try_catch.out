@@ -1,0 +1,11 @@
+release risky 5
+20
+release risky 0
+caught DivideByZero (SE00300) on line 14
+IndexOutOfRange
+FileNotFound: true
+8
+2
+inner DivideByZero
+outer DivideByZero
+done

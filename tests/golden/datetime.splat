@@ -1,0 +1,69 @@
+# Phase 10: dates, times, durations, calendar steps and locale-pinned formatting
+d := d"2024-03-01"
+print d
+print "{d:iso} {d:%d %B %Y} {d:%a}"
+print d + 30d
+print d + 1mo
+print d"2024-01-31" + 1mo
+print d"2023-01-31" + 1mo
+print d"2024-02-29" + 1y
+print d - d"2024-02-01"
+print d.year(), d.month(), d.day(), d.weekday()
+
+s := t"2024-03-01T10:15:00Z"
+print s
+print s + 90m
+print s.hour(), s.minute()
+print t"2024-03-01T10:15:00+05:30"
+print s - t"2024-03-01T08:00:00Z"
+print tm"09:30:00" + 45m
+print wrap_time(tm"23:30:00", 90m)
+print 2 * 1h + 30m
+
+print 1h + 30m == 90m
+print d"2024-03-01" < d"2024-03-02"
+
+loop x in d"2024-03-01"..d"2024-03-05":
+    print x
+;
+loop x in d"2024-01-31"..=d"2024-04-30" by 1mo:
+    print x
+;
+loop t in tm"09:00:00"..tm"10:00:00" by 15m:
+    print t
+;
+loop x in t"2024-03-01T00:00:00Z"..t"2024-03-01T03:00:00Z" by 1h:
+    print x
+;
+loop x in rev(d"2024-03-01"..d"2024-03-04"):
+    print x
+;
+loop x in d"2024-03-05"..d"2024-03-01":
+    print "never"
+;
+loop x in d"2024-03-01"..d"2024-03-03" then d"2024-04-01"..d"2024-04-03":
+    print x
+;
+print d"2024-03-03" in d"2024-03-01"..d"2024-03-10"
+print d"2024-03-03" in d"2024-03-01"..d"2024-03-10" by 2d
+print d"2024-03-02" in d"2024-03-01"..d"2024-03-10" by 2d
+
+print date("2024-03-01")
+print date("03/05/2024")
+print date("13/45/2024")
+print time("9:5")
+print time("14:30")
+print stamp("2024-03-01T10:15:00Z")
+print today().year() > 2000
+print now().year() > 2000
+
+try:
+    x := tm"23:00:00" + 2h
+catch e:
+    print e.kind
+;
+try:
+    x := d"9999-12-31" + 1d
+catch e:
+    print e.kind
+;

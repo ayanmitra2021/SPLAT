@@ -1,0 +1,42 @@
+[SE00410] 🎭 OPERATOR IMPERSONATOR [Line 16]: '%' is not an operator you can overload.
+  --> bad_oop.splat:16:5
+    |
+ 16 |     fn op %(self, o::Child)::Child = self
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Overloadable operators are: + - * / @ == != < > []
+
+[SE00414] 🥚 UNHATCHED FIELD [Line 2]: field 'x' of 'A' has no default and 'init' never sets it.
+  --> bad_oop.splat:2:5
+   |
+ 2 |     x::i32
+   |     ^^^^^^
+  Fix: Give 'x' a default ('x::T = ...') or assign 'self.x = ...' in 'init'.
+
+[SE00408] 🧬 GENETIC MISMATCH [Line 15]: 'go' overrides a parent method but has parameter types (txt) where the parent has (i32).
+  --> bad_oop.splat:15:5
+    |
+ 15 |     fn go(self, a::txt)::i32 = 1
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: An override must keep the parent's parameter types and return a compatible type.
+
+[SE00409] 👪 PARENTAL CONSENT [Line 12]: 'Base' cannot be born without arguments, so 'Child.init' has to introduce itself with 'super.init(...)'.
+  --> bad_oop.splat:12:5
+    |
+ 12 |     fn init(self):
+    |     ^^^^^^^^^^^^^^...
+  Fix: Call 'super.init(...)' with the arguments 'Base.init' needs, or give those parameters defaults.
+
+[SE00101] 🔍 WHO DIS [Line 19]: 'A.nothing' has never been introduced to me. Did you invent it in a dream?
+  --> bad_oop.splat:19:3
+    |
+ 19 | r.nothing()
+    |   ^^^^^^^
+  Fix: Declare 'A.nothing' with ':=' or 'var' before using it, or check the spelling.
+
+[SE00404] 🧊 ICE BREAKER [Line 20]: Tried to mutate 'r' in a read-only context. Some collections are immutable.
+  --> bad_oop.splat:20:1
+    |
+ 20 | r.x = 3
+    | ^
+  Fix: Declare 'r' with 'var' to make it mutable.
+

@@ -144,6 +144,7 @@ public static class AstPrinter
         PickExpr p => SNode.L("pick", [Expr(p.Subject), .. p.Arms.Select(Arm)]),
         TupleExpr t => SNode.L("tuple", t.Items.Select(Expr)),
         PairExpr pr => SNode.L("pair", [Expr(pr.Key), Expr(pr.Value)]),
+        TemporalLiteral t => SNode.A(TemporalText(t)),
         ErrorExpr => SNode.A("(error)"),
         _ => SNode.A("?expr"),
     };
@@ -217,6 +218,15 @@ public static class AstPrinter
             .. m.Variants.Select(v => v.Payloads.Count == 0 ? SNode.A(v.Name) : SNode.L(v.Name, v.Payloads.Select(Type)))]),
         TupleBindStmt tb => SNode.L(tb.IsMutable ? "var-tuple" : "bind-tuple",
             [SNode.L("names", tb.Names.Select(SNode.A)), Expr(tb.Value)]),
+        ClassDecl c => ClassNode(c),
+        TraitDecl t => SNode.L("trait", [SNode.A(t.Name),
+            .. t.Generics.Count == 0 ? [] : new[] { Generics(t.Generics) },
+            .. t.Methods.Select(Fn)]),
+        ExtendDecl x => SNode.L("extend", [Type(x.Target),
+            .. x.Trait is null ? [] : new[] { SNode.L("with", [Type(x.Trait)]) },
+            .. x.Methods.Select(Fn)]),
+        DropStmt d => SNode.L("drop", [Expr(d.Target)]),
+        TryStmt t => SNode.L("try", [Block(t.Body), SNode.L("catch", [SNode.A(t.CatchName), Block(t.Handler)])]),
         ErrorStmt => SNode.A("(error)"),
         _ => SNode.A("?stmt"),
     };
@@ -225,11 +235,49 @@ public static class AstPrinter
     {
         var items = new List<SNode> { SNode.A(c.Name) };
         if (c.Generics.Count > 0)
-            items.Add(SNode.L("generics", c.Generics.Select(g => SNode.A((g.IsDim ? "$" : "") + g.Name + (g.Bound is null ? "" : ":" + g.Bound)))));
+            items.Add(Generics(c.Generics));
         items.Add(SNode.L("params", c.Params.Select(Parameter)));
         if (c.ReturnType is not null) items.Add(SNode.L("->", [Type(c.ReturnType)]));
-        items.Add(c.ExprBody is not null ? SNode.L("=", [Expr(c.ExprBody)]) : Block(c.BlockBody!));
+        if (c.ExprBody is not null) items.Add(SNode.L("=", [Expr(c.ExprBody)]));
+        else if (c.BlockBody is not null) items.Add(Block(c.BlockBody));
         return SNode.L("fn", items);
+    }
+
+    private static SNode Generics(IReadOnlyList<GenericParam> gs) =>
+        SNode.L("generics", gs.Select(g => SNode.A((g.IsDim ? "$" : "") + g.Name + (g.Bound is null ? "" : ":" + SourceFormatter.Type(g.Bound)))));
+
+    private static SNode ClassNode(ClassDecl c)
+    {
+        var items = new List<SNode> { SNode.A(c.Name) };
+        if (c.Generics.Count > 0) items.Add(Generics(c.Generics));
+        if (c.Parent is not null) items.Add(SNode.L("from", [Type(c.Parent)]));
+        if (c.Traits.Count > 0) items.Add(SNode.L("with", c.Traits.Select(Type)));
+        foreach (var f in c.Fields)
+            items.Add(SNode.L(f.IsSecret ? "secret-field" : "field",
+                [SNode.A(f.Name), Type(f.Type), .. f.Default is null ? [] : new[] { Expr(f.Default) }]));
+        foreach (var m in c.Methods)
+            items.Add(m.IsSecret ? SNode.L("secret", [Fn(m.Fn)]) : Fn(m.Fn));
+        return SNode.L("class", items);
+    }
+
+    public static string TemporalText(TemporalLiteral t) => t.Kind switch
+    {
+        TemporalKind.Date => "d\"" + Splat.Core.Temporal.IsoDate(t.Value) + "\"",
+        TemporalKind.Time => "tm\"" + Splat.Core.Temporal.IsoTime(t.Value) + "\"",
+        TemporalKind.Stamp => "t\"" + Splat.Core.Temporal.IsoStamp(t.Value) + "\"",
+        TemporalKind.Dur => DurSource(t.Value),
+        _ => t.Value % 12 == 0 && t.Value != 0 ? $"{t.Value / 12}y" : $"{t.Value}mo",
+    };
+
+    private static string DurSource(long ns)
+    {
+        const long ms = Splat.Core.Temporal.NsPerMs;
+        if (ns != 0 && ns % Splat.Core.Temporal.NsPerWeek == 0) return $"{ns / Splat.Core.Temporal.NsPerWeek}w";
+        if (ns != 0 && ns % Splat.Core.Temporal.NsPerDay == 0) return $"{ns / Splat.Core.Temporal.NsPerDay}d";
+        if (ns != 0 && ns % Splat.Core.Temporal.NsPerHour == 0) return $"{ns / Splat.Core.Temporal.NsPerHour}h";
+        if (ns != 0 && ns % Splat.Core.Temporal.NsPerMin == 0) return $"{ns / Splat.Core.Temporal.NsPerMin}m";
+        if (ns != 0 && ns % Splat.Core.Temporal.NsPerSec == 0) return $"{ns / Splat.Core.Temporal.NsPerSec}s";
+        return $"{ns / ms}ms";
     }
 
     private static SNode Parameter(Param p)

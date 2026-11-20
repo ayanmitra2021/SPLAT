@@ -15,6 +15,9 @@ internal sealed class Cell(Value value, bool mutable)
 {
     public Value V = value;
     public bool Mutable { get; } = mutable;
+    /// <summary>The variable no longer holds a live value: it was moved into another owner or dropped.</summary>
+    public bool Moved;
+    public int MovedLine;
 }
 
 /// <summary>A runtime scope: names to cells, chained to the enclosing scope.</summary>
@@ -31,8 +34,26 @@ public sealed class Env(Env? parent = null)
 
     private readonly Env? _parent = parent;
 
-    internal void Define(string name, Value value, bool mutable) =>
-        (_vars ??= new Dictionary<string, Cell>(StringComparer.Ordinal))[name] = new Cell(value, mutable);
+    internal Cell Define(string name, Value value, bool mutable)
+    {
+        var cell = new Cell(value, mutable);
+        (_vars ??= new Dictionary<string, Cell>(StringComparer.Ordinal))[name] = cell;
+        return cell;
+    }
+
+    internal Env? Parent => _parent;
+
+    /// <summary>Objects variables of this scope own, in declaration order (destroyed in reverse when the scope ends).</summary>
+    internal List<(Cell Cell, HeapObj Obj)>? Owned;
+    internal void AddOwned(Cell cell, HeapObj obj) => (Owned ??= []).Add((cell, obj));
+
+    /// <summary>The scope that actually declares <paramref name="name"/>.</summary>
+    internal Env? Locate(string name)
+    {
+        for (var e = this; e is not null; e = e._parent)
+            if (e._vars is not null && e._vars.ContainsKey(name)) return e;
+        return null;
+    }
 
     /// <summary>Remembers the current value of every mutable binding in this scope chain, so a failed REPL entry can be undone.</summary>
     internal List<(Cell Cell, Value Value)> SnapshotMutable()
@@ -76,6 +97,8 @@ internal sealed class Closure
     public required Env Env { get; init; }
     /// <summary>False when the declared return type is <c>unit</c>: a trailing expression is then discarded.</summary>
     public required bool ReturnsValue { get; init; }
+    /// <summary>The class a method was declared in (what <c>super</c> is relative to), or null.</summary>
+    public ClassDef? DeclClass { get; init; }
 }
 
 /// <summary>
@@ -110,6 +133,7 @@ public sealed partial class Interpreter
         _stdin = stdin ?? Console.In;
         Globals = new Env();
         InitBuiltinEnums();
+        InitBuiltinClasses();
     }
 
     private void InitBuiltinEnums()
@@ -132,24 +156,29 @@ public sealed partial class Interpreter
     /// bindings behind) and reports runtime errors to <paramref name="diagnostics"/>. When the last statement is an
     /// expression, its value is returned in <paramref name="last"/>.
     /// </summary>
-    public bool Execute(Program program, Env env, DiagnosticEngine diagnostics, out Value? last)
+    public bool Execute(Program program, Env env, DiagnosticEngine diagnostics, out Value? last, bool keepScope = false)
     {
         _diag = diagnostics;
         bool ok = true;
         Value? tail = null;
-        var thread = new Thread(() => ok = RunCore(program, env, out tail), ThreadStackBytes);
+        var thread = new Thread(() =>
+        {
+            lock (_gil) ok = RunCore(program, env, out tail, keepScope);
+        }, ThreadStackBytes);
         thread.Start();
         thread.Join();
         last = ok ? tail : null;
         return ok;
     }
 
-    private bool RunCore(Program program, Env env, out Value? last)
+    private bool RunCore(Program program, Env env, out Value? last, bool keepScope)
     {
         last = null;
+        _panicking = false;
+        _classStack.Clear();
         try
         {
-            ExecBlock(program.Statements, env, true, out var tail);
+            ExecBlock(program.Statements, env, true, out var tail, exitScope: !keepScope);
             if (program.Statements.Count > 0 && program.Statements[^1] is ExprStmt) last = tail;
             return true;
         }
@@ -212,6 +241,7 @@ public sealed partial class Interpreter
             }
             else if (s is EnumDecl md) HoistEnum(md, env);
         }
+        HoistTypes(stmts, env);
     }
 
     private void HoistEnum(EnumDecl md, Env env)
@@ -223,22 +253,30 @@ public sealed partial class Interpreter
         }
     }
 
-    private Flow ExecBlock(IReadOnlyList<Stmt> stmts, Env env, bool wantTail, out Value tail)
+    private Flow ExecBlock(IReadOnlyList<Stmt> stmts, Env env, bool wantTail, out Value tail, bool exitScope = true)
     {
         tail = Value.Unit;
         Hoist(stmts, env);
-        for (int i = 0; i < stmts.Count; i++)
+        try
         {
-            var s = stmts[i];
-            if (wantTail && i == stmts.Count - 1)
+            for (int i = 0; i < stmts.Count; i++)
             {
-                if (s is ExprStmt es) { tail = Eval(es.Expression, env); return Flow.Normal; }
-                if (s is IfStmt h) return ExecIf(h, env, true, out tail);
+                var s = stmts[i];
+                if (wantTail && i == stmts.Count - 1)
+                {
+                    if (s is ExprStmt es) { tail = EvalMoveOut(es.Expression, env); return Flow.Normal; }
+                    if (s is IfStmt h) return ExecIf(h, env, true, out tail);
+                }
+                var f = Exec(s, env);
+                if (f != Flow.Normal) return f;
             }
-            var f = Exec(s, env);
-            if (f != Flow.Normal) return f;
+            return Flow.Normal;
         }
-        return Flow.Normal;
+        finally
+        {
+            // Scope exit: deinit what this scope's variables own, last declared first (also while an error unwinds).
+            if (exitScope) CleanupEnv(env);
+        }
     }
 
     private Flow Exec(Stmt s, Env env)
@@ -246,19 +284,32 @@ public sealed partial class Interpreter
         switch (s)
         {
             case BindStmt b:
-                env.Define(b.Name, EvalOwned(b.Value, env), b.IsMutable);
+            {
+                var bound = EvalOwned(b.Value, env);
+                var cell = env.Define(b.Name, bound, b.IsMutable);
+                ClaimBind(bound, b.Value, env, cell);
                 return Flow.Normal;
+            }
             case AssignStmt a:
                 ExecAssign(a, env);
                 return Flow.Normal;
             case ExprStmt e:
-                Eval(e.Expression, env);
+            {
+                var ev = Eval(e.Expression, env);
+                // A constructed object nobody keeps dies at the end of its statement.
+                if (ev.Kind == VKind.Object && e.Expression is CallExpr { Callee: NameExpr }
+                    && ev.AsObj is { Owner: null, Dead: false, Dying: false } temp && !IsKeepAlive(temp))
+                    Destroy(temp, e.Span);
                 return Flow.Normal;
+            }
             case ReturnStmt y:
-                _ret = y.Value is null ? Value.Unit : Eval(y.Value, env);
+                _ret = y.Value is null ? Value.Unit : EvalMoveOut(y.Value, env);
                 return Flow.Return;
+            case DropStmt dr: ExecDrop(dr, env); return Flow.Normal;
+            case TryStmt ty: return ExecTry(ty, env);
             case RipStmt r:
             {
+                _panicking = true;
                 string msg = r.Message is null ? "Unrecoverable panic. No further details; the program lost the will to continue." : Eval(r.Message, env).AsString;
                 throw Fail(Templates.Panic(r.Span, msg, Trace()));
             }
@@ -275,9 +326,12 @@ public sealed partial class Interpreter
     private void ExecAssign(AssignStmt a, Env env)
     {
         if (a.Target is IndexExpr ix) { ExecIndexAssign(a, ix, env); return; }
+        if (a.Target is MemberExpr fm) { ExecFieldAssign(a, fm, env); return; }
         var name = (NameExpr)a.Target;
         var cell = env.Find(name.Name) ?? throw Fail(Templates.Internal(name.Span, $"unbound variable '{name.Name}'"));
         var rhs = a.Op == TokenKind.Assign ? EvalOwned(a.Value, env) : Eval(a.Value, env);
+        var old = cell.V;
+        cell.Moved = false;
         cell.V = a.Op switch
         {
             TokenKind.Assign => rhs,
@@ -287,6 +341,13 @@ public sealed partial class Interpreter
             TokenKind.SlashAssign => Binary(TokenKind.Slash, cell.V, rhs, a.Span),
             _ => throw Fail(Templates.Internal(a.Span, $"assignment operator {a.Op}")),
         };
+        if (a.Op == TokenKind.Assign && cell.V.Kind is VKind.Object or VKind.List or VKind.Tuple or VKind.Enum or VKind.Set or VKind.Map)
+        {
+            // Replacing an owned object ends its life; the new value is claimed by the same variable.
+            if (old.Kind == VKind.Object && ReferenceEquals(old.AsObj.Owner, cell) && !(cell.V.Kind == VKind.Object && ReferenceEquals(cell.V.Ref, old.Ref)))
+                Destroy(old.AsObj, a.Span);
+            ClaimBind(cell.V, a.Value, env.Locate(name.Name) ?? env, cell);
+        }
     }
 
     private Flow ExecIf(IfStmt h, Env env, bool wantTail, out Value tail)
@@ -336,10 +397,23 @@ public sealed partial class Interpreter
     /// <summary>
     /// The one notion of "iterable" at runtime: txt→chars, range→ints, chain→parts, List/Set/Map/Tuple.
     /// </summary>
-    private static IEnumerable<Value> Iterate(Value v)
+    private IEnumerable<Value> Iterate(Value v)
     {
         switch (v.Kind)
         {
+            case VKind.Object:
+                if (v.AsObj is IterObj lazy) { foreach (var x in lazy.Consume()) yield return x; }
+                else if (v.AsObj is ClassInst)
+                {
+                    // A class implementing Iterable<T>: call next() until it answers Nada.
+                    while (true)
+                    {
+                        var ev = CallUserMethod(v, "next", [], SourceSpan.None).AsEnum;
+                        if (ev.VariantName != "Got") yield break;
+                        yield return ev.Payloads[0];
+                    }
+                }
+                break;
             case VKind.Txt:
                 foreach (var rune in v.AsString.EnumerateRunes()) yield return Value.Char(rune.Value);
                 break;
@@ -367,15 +441,17 @@ public sealed partial class Interpreter
     }
 
     /// <summary>`x in S` for ranges, txt, chains, lists, sets and maps.</summary>
-    private static bool Contains(Value set, Value x)
+    private bool Contains(Value set, Value x)
     {
         switch (set.Kind)
         {
+            case VKind.Object:
+                return Iterate(set).Any(item => ValueEquality.Equal(item, x));
             case VKind.Txt:
                 if (x.Kind == VKind.Char) return set.AsString.EnumerateRunes().Any(r => r.Value == x.Bits);
                 return set.AsString.Contains(x.AsString, StringComparison.Ordinal);
             case VKind.Range:
-                return set.AsRange.Contains(x.AsInt128);
+                return set.AsRange.Contains(x);
             case VKind.Chain:
                 return set.AsChain.Any(part => Contains(part, x));
             case VKind.List:
@@ -406,7 +482,11 @@ public sealed partial class Interpreter
             case NameExpr n:
             {
                 var cell = env.Find(n.Name);
-                if (cell is not null) return cell.V;
+                if (cell is not null)
+                {
+                    if (cell.Moved) throw Fail(Templates.UseAfterMove(n.Span, n.Name, cell.MovedLine));
+                    return cell.V;
+                }
                 if (_unitVariants.Contains(n.Name)) return Value.Enum(new EnumValue(_variantToEnum[n.Name], n.Name, []));
                 throw Fail(Templates.Internal(n.Span, $"unbound name '{n.Name}'"));
             }
@@ -437,6 +517,13 @@ public sealed partial class Interpreter
                 return Value.Tuple(te.Items.Select(i => EvalOwned(i, env)).ToArray());
             case PickExpr pk:
                 return EvalPick(pk, env);
+            case MemberExpr me: return EvalMember(me, env);
+            case TemporalLiteral tl:
+                return Value.Temporal(tl.Kind switch
+                {
+                    TemporalKind.Date => VKind.Date, TemporalKind.Time => VKind.Time, TemporalKind.Stamp => VKind.Stamp,
+                    TemporalKind.Dur => VKind.Dur, _ => VKind.Cal,
+                }, tl.Value);
             case IndexExpr ix:
                 return EvalIndex(ix, env);
             default:
@@ -458,7 +545,10 @@ public sealed partial class Interpreter
                 case TemplateExpr x:
                 {
                     var v = Eval(x.Value, env);
-                    if (string.IsNullOrEmpty(x.Format)) sb.Append(Formatter.Display(v));
+                    if (!string.IsNullOrEmpty(x.Format) && v.Kind is VKind.Date or VKind.Time or VKind.Stamp
+                        && (x.Format == "iso" || x.Format.StartsWith('%')))
+                        sb.Append(Formatter.FormatTemporal(v, x.Format));
+                    else if (string.IsNullOrEmpty(x.Format)) sb.Append(Formatter.Display(v));
                     else
                     {
                         FormatSpec.TryParse(x.Format, out var spec, out _);
@@ -521,6 +611,22 @@ public sealed partial class Interpreter
     {
         var range = Eval(s.Range, env).AsRange;
         var step = Eval(s.Step, env);
+        if (step.Kind == VKind.Cal)
+        {
+            if (step.Bits <= 0) throw Fail(Templates.BadStep(s.Step.Span, Formatter.Display(step)));
+            return Value.Range(range with { Step = step.Bits, Months = true });
+        }
+        if (step.Kind == VKind.Dur)
+        {
+            if (step.Bits <= 0) throw Fail(Templates.BadStep(s.Step.Span, Formatter.Display(step)));
+            if (range.Lo.Kind == VKind.Date)
+            {
+                if (step.Bits % Temporal.NsPerDay != 0)
+                    throw Fail(Templates.TimeOverflow(s.Step.Span, $"A Date moves in whole days, and {Temporal.DurText(step.Bits)} is not a whole number of days."));
+                return Value.Range(range with { Step = step.Bits / Temporal.NsPerDay });
+            }
+            return Value.Range(range with { Step = step.Bits });
+        }
         if (step.AsInt128 <= 0) throw Fail(Templates.BadStep(s.Step.Span, Formatter.Display(step)));
         return Value.Range(range with { Step = step.AsInt128 });
     }
@@ -530,6 +636,8 @@ public sealed partial class Interpreter
         if (c.Callee is MemberExpr mexpr) return CallMethod(c, mexpr, env);
         if (c.Callee is NameExpr n && env.Find(n.Name) is null)
         {
+            if (!Prelude.IsBuiltin(n.Name) && !_variantToEnum.ContainsKey(n.Name) && _classes.TryGetValue(n.Name, out var classDef) && !classDef.Builtin)
+                return Construct(classDef, c, env);
             if (!Prelude.IsBuiltin(n.Name) && Types.ByName.TryGetValue(n.Name, out var target))
                 return Convert(Eval(c.Args[0].Value, env), target, c.Span);
             if (n.Name is "print" or "eprint")
@@ -549,16 +657,8 @@ public sealed partial class Interpreter
 
         var fv = Eval(c.Callee, env);
         var closure = (Closure)fv.Ref!;
-        var map = _info.ArgMap(c);
-        var vals = new Value[closure.Params.Count];
-        var has = new bool[closure.Params.Count];
-        for (int i = 0; i < c.Args.Count; i++)
-        {
-            int target = map is null ? i : map[i];
-            vals[target] = Eval(c.Args[i].Value, env);
-            has[target] = true;
-        }
-        return Call(closure, vals, has, c.Span);
+        PrepareArgs(closure, c, env, out var vals, out var has);
+        return CallTracked(closure, vals, has, c.Span, null);
     }
 
     // ---- prelude ----
@@ -638,6 +738,7 @@ public sealed partial class Interpreter
             case "parse_mid": return ParseFloat(args[0].AsString, VKind.F32);
             case "parse_chonk": return ParseFloat(args[0].AsString, VKind.F64);
             default:
+                if (TryNativeBuiltin(name, args, c.Span, out var native)) return native;
                 throw Fail(Templates.Internal(c.Span, $"prelude function '{name}'"));
         }
     }
@@ -659,12 +760,13 @@ public sealed partial class Interpreter
         return Nada();
     }
 
-    private Value Call(Closure f, Value[] vals, bool[] has, SourceSpan callSite)
+    private Value Call(Closure f, Value[] vals, bool[] has, SourceSpan callSite, Value? self = null)
     {
         if (_frames.Count >= MaxCallDepth)
             throw Fail(Templates.StackOverflow(callSite, _frames.Count));
 
         var env = new Env(f.Env);
+        if (self is { } selfValue) env.Define("self", selfValue, false);
         for (int i = 0; i < f.Params.Count; i++)
         {
             var p = f.Params[i];
@@ -672,6 +774,7 @@ public sealed partial class Interpreter
         }
 
         _frames.Add((f.Name, callSite));
+        if (f.DeclClass is not null) _classStack.Add(f.DeclClass);
         try
         {
             if (f.ExprBody is not null)
@@ -686,6 +789,7 @@ public sealed partial class Interpreter
         finally
         {
             _frames.RemoveAt(_frames.Count - 1);
+            if (f.DeclClass is not null) _classStack.RemoveAt(_classStack.Count - 1);
         }
     }
 

@@ -74,6 +74,21 @@ public static class DiagnosticCodes
         [DiagnosticCategory.NotHashable] = new(Severity.Error, 406),
         [DiagnosticCategory.BadTypeArgs] = new(Severity.Error, 115),
         [DiagnosticCategory.KeyNotFound] = new(Severity.Error, 308),
+        // Phases 8-11 (errors): OOP, traits, extend, handled errors, I/O, time, networking
+        [DiagnosticCategory.SecretAccess] = new(Severity.Error, 407),
+        [DiagnosticCategory.BadOverride] = new(Severity.Error, 408),
+        [DiagnosticCategory.SuperInitRequired] = new(Severity.Error, 409),
+        [DiagnosticCategory.BadOverload] = new(Severity.Error, 410),
+        [DiagnosticCategory.MissingTraitMethods] = new(Severity.Error, 411),
+        [DiagnosticCategory.AmbiguousMember] = new(Severity.Error, 412),
+        [DiagnosticCategory.InheritanceCycle] = new(Severity.Error, 413),
+        [DiagnosticCategory.UninitializedField] = new(Severity.Error, 414),
+        [DiagnosticCategory.SelfOutside] = new(Severity.Error, 415),
+        [DiagnosticCategory.MissingRangeStep] = new(Severity.Error, 116),
+        [DiagnosticCategory.IoError] = new(Severity.Error, 309),
+        [DiagnosticCategory.BadJson] = new(Severity.Error, 310),
+        [DiagnosticCategory.TimeOverflow] = new(Severity.Error, 311),
+        [DiagnosticCategory.NetworkFail] = new(Severity.Error, 312),
         // Phase 7: warnings (SW00400)
         [DiagnosticCategory.UnreachableArm] = new(Severity.Warning, 400),
     };

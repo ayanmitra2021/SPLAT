@@ -194,9 +194,17 @@ public sealed partial class Parser
                     return ParseEnum();
                 case TokenKind.Pick:
                     return ParseExpressionStatement(); // pick is a prefix expression
-                case TokenKind.Class or TokenKind.Trait or TokenKind.Extend
-                    or TokenKind.Try or TokenKind.Arena or TokenKind.Drop or TokenKind.Import or TokenKind.Network
-                    or TokenKind.Train:
+                case TokenKind.Class: return ParseClass();
+                case TokenKind.Trait: return ParseTrait();
+                case TokenKind.Extend: return ParseExtend();
+                case TokenKind.Try: return ParseTry();
+                case TokenKind.Drop:
+                {
+                    var dk = Advance();
+                    var target = ParseExpr();
+                    return new DropStmt(target, SpanFrom(dk));
+                }
+                case TokenKind.Arena or TokenKind.Import or TokenKind.Network or TokenKind.Train:
                     return ParseReserved();
                 case TokenKind.Ident:
                     if (PeekTok().Kind == TokenKind.ColonAssign || PeekTok().Kind == TokenKind.DoubleColon)
@@ -298,7 +306,7 @@ public sealed partial class Parser
     /// </summary>
     private static bool StartsCommandArgument(Token t) =>
         !t.NewlineBefore && t.SpaceBefore && t.Kind is
-            TokenKind.String or TokenKind.Int or TokenKind.Float or TokenKind.Char or TokenKind.Ident or TokenKind.True
+            TokenKind.String or TokenKind.Int or TokenKind.Float or TokenKind.Char or TokenKind.Temporal or TokenKind.Ident or TokenKind.True
             or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde;
 
     // ---- ret / rip ----
@@ -534,7 +542,7 @@ public sealed partial class Parser
         [TokenKind.BangEq] = "!=", [TokenKind.Lt] = "<", [TokenKind.Le] = "<=", [TokenKind.Gt] = ">", [TokenKind.Ge] = ">=",
     };
 
-    private Stmt ParseFn()
+    private Stmt ParseFn(bool allowBodyless = false)
     {
         var kw = Advance();
         string name;
@@ -576,6 +584,8 @@ public sealed partial class Parser
 
         TypeRef? ret = Match(TokenKind.DoubleColon) ? ParseType() : null;
 
+        if (allowBodyless && !At(TokenKind.Assign) && !At(TokenKind.Colon))
+            return new FnDecl(name, opSymbol, generics, parms, ret, null, null, SpanFrom(kw)); // a required trait method
         if (Match(TokenKind.Assign))
         {
             var body = ParseExpr();
@@ -622,7 +632,7 @@ public sealed partial class Parser
             else
             {
                 var n = Expect(TokenKind.Ident, "a generic parameter name");
-                string? bound = Match(TokenKind.Colon) ? Expect(TokenKind.Ident, "a trait name after ':'").Text : null;
+                TypeRef? bound = Match(TokenKind.Colon) ? ParseType() : null;
                 list.Add(new GenericParam(n.Text, false, bound, SpanFrom(start)));
             }
         } while (Match(TokenKind.Comma));
@@ -689,6 +699,12 @@ public sealed partial class Parser
                 do dims.Add(ParseDim()); while (Match(TokenKind.Comma));
                 Expect(TokenKind.RBracket, "']' to close the dimensions");
                 type = new TensorType(type, dims, SpanFrom(start));
+            }
+            // `T?` is sugar for Maybe<T>.
+            while (At(TokenKind.Question))
+            {
+                Advance();
+                type = new NamedType("Maybe", [type], SpanFrom(start));
             }
             return type;
         }
@@ -953,6 +969,124 @@ public sealed partial class Parser
         throw Fail(t, "a pattern (_, a variant like Got(x), a name to bind, or a literal)");
     }
 
+    // ---- Phases 8-10: class, trait, extend, try ----
+
+    private Stmt ParseClass()
+    {
+        var kw = Advance(); // 'class'
+        var name = Expect(TokenKind.Ident, "a class name after 'class'");
+        var generics = At(TokenKind.Lt) ? ParseGenericParams() : (List<GenericParam>)[];
+        TypeRef? parent = Match(TokenKind.From) ? ParseType() : null;
+        var traits = new List<TypeRef>();
+        if (Match(TokenKind.With))
+            do traits.Add(ParseType()); while (Match(TokenKind.Comma));
+        var opener = ExpectBlockOpen("'class' body");
+        var fields = new List<FieldDecl>();
+        var methods = new List<MethodMember>();
+        Enter();
+        try
+        {
+            while (!At(TokenKind.Semicolon) && !AtEnd)
+            {
+                int before = _p;
+                try { ParseClassMember(fields, methods); }
+                catch (ParseAbort) { SkipMember(); if (_p == before) Advance(); }
+            }
+        }
+        finally { Leave(); }
+        CloseBlock(opener);
+        return new ClassDecl(name.Text, name.Span, generics, parent, traits, fields, methods, SpanFrom(kw));
+    }
+
+    private void ParseClassMember(List<FieldDecl> fields, List<MethodMember> methods)
+    {
+        var start = Cur;
+        bool secret = Match(TokenKind.Secret);
+        if (At(TokenKind.Fn))
+        {
+            var fn = (FnDecl)ParseFn();
+            methods.Add(new MethodMember(fn, secret, SpanFrom(start)));
+            return;
+        }
+        if (At(TokenKind.Ident) && PeekTok().Kind == TokenKind.DoubleColon)
+        {
+            var name = Advance();
+            Advance(); // '::'
+            var type = ParseType();
+            Expr? def = Match(TokenKind.Assign) ? ParseExpr() : null;
+            fields.Add(new FieldDecl(name.Text, name.Span, type, def, secret, SpanFrom(start)));
+            return;
+        }
+        throw Fail(Cur, "a field ('name::Type') or a method ('fn name(self ...)') inside the class");
+    }
+
+    /// <summary>Skips to the next member of a class/trait/extend body (or its closing ';').</summary>
+    private void SkipMember()
+    {
+        while (!AtEnd && !At(TokenKind.Semicolon) && !At(TokenKind.Fn) && !At(TokenKind.Secret)
+               && !(At(TokenKind.Ident) && Cur.NewlineBefore))
+            Advance();
+    }
+
+    private List<FnDecl> ParseFnMembers(string what, bool allowBodyless)
+    {
+        var methods = new List<FnDecl>();
+        Enter();
+        try
+        {
+            while (!At(TokenKind.Semicolon) && !AtEnd)
+            {
+                int before = _p;
+                try
+                {
+                    if (!At(TokenKind.Fn)) throw Fail(Cur, $"a method ('fn name(self ...)') inside the {what}");
+                    methods.Add((FnDecl)ParseFn(allowBodyless));
+                }
+                catch (ParseAbort) { SkipMember(); if (_p == before) Advance(); }
+            }
+        }
+        finally { Leave(); }
+        return methods;
+    }
+
+    private Stmt ParseTrait()
+    {
+        var kw = Advance(); // 'trait'
+        var name = Expect(TokenKind.Ident, "a trait name after 'trait'");
+        var generics = At(TokenKind.Lt) ? ParseGenericParams() : (List<GenericParam>)[];
+        var opener = ExpectBlockOpen("'trait' body");
+        var methods = ParseFnMembers("trait", allowBodyless: true);
+        CloseBlock(opener);
+        return new TraitDecl(name.Text, name.Span, generics, methods, SpanFrom(kw));
+    }
+
+    private Stmt ParseExtend()
+    {
+        var kw = Advance(); // 'extend'
+        var target = ParseType();
+        TypeRef? trait = Match(TokenKind.With) ? ParseType() : null;
+        var opener = ExpectBlockOpen("'extend' body");
+        var methods = ParseFnMembers("extend block", allowBodyless: false);
+        CloseBlock(opener);
+        return new ExtendDecl(target, trait, methods, SpanFrom(kw));
+    }
+
+    private Stmt ParseTry()
+    {
+        var kw = Advance(); // 'try'
+        var opener = ExpectBlockOpen("'try' body");
+        var body = new List<Stmt>();
+        while (!AtEnd && !At(TokenKind.Semicolon) && !At(TokenKind.Catch)) body.Add(ParseStatementSafe());
+        var bodyBlock = MakeBlock(opener, body);
+        if (!At(TokenKind.Catch)) throw Fail(Cur, "'catch e:' (every 'try' needs a 'catch' to handle the error)");
+        Advance(); // 'catch'
+        var name = Expect(TokenKind.Ident, "a name for the caught error, as in 'catch e:'");
+        var handlerOpener = ExpectBlockOpen("'catch' block");
+        var handler = MakeBlock(handlerOpener, ParseStatements(stopAtBranch: false));
+        CloseBlock(handlerOpener);
+        return new TryStmt(bodyBlock, name.Text, name.Span, handler, SpanFrom(kw));
+    }
+
     // ---- later-milestone constructs ----
 
     private Stmt ParseReserved()
@@ -960,9 +1094,6 @@ public sealed partial class Parser
         var kw = Advance();
         int phase = kw.Kind switch
         {
-            TokenKind.Class or TokenKind.Drop => 8,
-            TokenKind.Trait or TokenKind.Extend => 9,
-            TokenKind.Try => 10,
             TokenKind.Network or TokenKind.Train => 16,
             TokenKind.Arena => 17,
             _ => 11, // imp: external packages

@@ -1,0 +1,123 @@
+# Milestone 2 acceptance: OOP + extend + built-in file/net, in one program.
+# (Run with SPLAT_LOCALE=en-US so dates print the same everywhere.)
+
+# ---- Phase 8: classes, inheritance, super, secret, operators, deinit ----
+class Animal:
+    name::txt
+    secret energy::i32 = 10
+
+    fn init(self, name::txt):
+        self.name = name
+    ;
+    fn speak(self)::txt = "{self.name} makes a sound"
+    fn tire(~self):
+        self.energy -= 3
+    ;
+    fn tired(self)::bool = self.energy < 5
+    fn deinit(self):
+        print "bye {self.name}"
+    ;
+;
+
+class Dog from Animal:
+    fn init(self, name::txt):
+        super.init(name)
+    ;
+    fn speak(self)::txt = "{self.name} barks, then: {super.speak()}"
+;
+
+class Vec2:
+    x::f32
+    y::f32
+    fn init(self, x::f32, y::f32):
+        self.x = x
+        self.y = y
+    ;
+    fn op +(self, o::Vec2)::Vec2 = Vec2(self.x + o.x, self.y + o.y)
+    fn op ==(self, o::Vec2)::bool = self.x == o.x and self.y == o.y
+    fn show(self)::txt = "({self.x}, {self.y})"
+;
+
+fn demo_oop():
+    var d = Dog("Rex")
+    print d.speak()
+    d.tire()
+    d.tire()
+    print d.tired()
+    print((Vec2(1.0, 2.0) + Vec2(0.5, 0.5)).show())
+    print Vec2(1.0, 1.0) == Vec2(1.0, 1.0)
+;
+demo_oop()
+
+# ---- Phase 9: trait, extend, bounded generic, Iterable ----
+extend txt:
+    fn shout(self)::txt = self.upper() + "!!!"
+;
+print "hi".shout()
+
+trait Talkable:
+    fn name(self)::txt
+    fn talk(self)::txt = "{self.name()} says hello"
+;
+class Robot with Talkable:
+    fn name(self)::txt = "R2"
+;
+fn greet<T: Talkable>(x::T)::txt = x.talk()
+print greet(Robot())
+
+class Countdown with Iterable<i32>:
+    n::i32
+    fn init(self, n::i32):
+        self.n = n
+    ;
+    fn next(~self)::i32?:
+        if self.n <= 0:
+            ret Nada
+        ;
+        v := self.n
+        self.n -= 1
+        ret Got(v)
+    ;
+;
+loop x in Countdown(3):
+    print "T-{x}"
+;
+
+# ---- Phase 10: errors, files, JSON, dates ----
+try:
+    print read("this_file_does_not_exist.txt")
+catch e:
+    print "caught {e.kind}"
+;
+
+path := "m2_acceptance_tmp.txt"
+write(path, "one\ntwo\n")
+append(path, "three\n")
+loop line in open(path, "r").lines():
+    print "line: {line}"
+;
+delete(path)
+
+j := load_json("\{\"lang\": \"splat\", \"milestone\": 2\}")
+print j["lang"].as_txt()
+print to_json(map("ok" => true))
+
+print d"2024-01-31" + 1mo
+loop t in tm"09:00:00"..tm"09:30:00" by 15m:
+    print t
+;
+
+# ---- Phase 11: networking, offline ----
+fn handler(req::Req)::Res = Res.ok("hello {req.path}")
+srv := serve(0, handler)
+print fetch("http://127.0.0.1:{srv.port()}/world")
+srv.stop()
+
+listener := Socket.listen(0)
+client := Socket.tcp("127.0.0.1", listener.port())
+conn := listener.accept()
+client.send("echo me")
+conn.send(conn.recv())
+print client.recv()
+
+print "milestone 2 done"

@@ -1,0 +1,11 @@
+hello from SPLAT
+POST:payload
+{"name": "ayan"}
+"zed"
+NetworkFail
+server error surfaced: NetworkFail
+hello from SPLAT
+after stop: NetworkFail
+server got ping
+echo:ping
+datagram

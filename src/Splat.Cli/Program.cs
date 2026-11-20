@@ -7,11 +7,24 @@ namespace Splat.Cli;
 
 public static class Program
 {
-    public const string Version = "0.2.0-phase6";
+    public const string Version = "0.3.0-phase11";
 
     public static int Main(string[] args)
     {
         try { Console.OutputEncoding = Encoding.UTF8; } catch (IOException) { }
+
+        // --locale <tag> pins how dates print (also SPLAT_LOCALE); it may appear anywhere before the command's file.
+        int li = Array.IndexOf(args, "--locale");
+        if (li >= 0)
+        {
+            if (li + 1 >= args.Length || !Temporal.Locale.TryFromTag(args[li + 1], out var loc))
+            {
+                Console.Error.WriteLine("Usage: --locale <tag>, for example --locale en-US or --locale en-GB");
+                return 64;
+            }
+            Temporal.Locale.Default = loc;
+            args = args.Where((_, i) => i != li && i != li + 1).ToArray();
+        }
 
         if (args.Length == 1 && args[0] is "--version" or "-v")
         {
@@ -82,6 +95,14 @@ public static class Program
         var outcome = checkOnly
             ? (Pipeline.Check(source, diag) ? RunOutcome.Ok : RunOutcome.CompileError)
             : Pipeline.Run(source, diag, Console.Out, Console.Error, Console.In);
+
+        // A program that started a server keeps serving until Ctrl+C (or until the server is stopped).
+        if (outcome == RunOutcome.Ok && ServerRegistry.AnyRunning)
+        {
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; ServerRegistry.StopAll(); };
+            Console.Error.WriteLine($"Serving on port(s) {string.Join(", ", ServerRegistry.RunningPorts)}. Press Ctrl+C to stop.");
+            ServerRegistry.WaitForAll();
+        }
 
         // Warnings (an unreachable pick arm, say) are shown even when the program is fine.
         if (outcome != RunOutcome.Ok || diag.Diagnostics.Count > 0) ConsolePrinter.ForStdErr().Print(diag);

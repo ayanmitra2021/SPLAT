@@ -54,7 +54,7 @@ public sealed partial class Parser
     internal static int PrecReduceBody => BpAdd;
 
     private static bool CanStartExpr(Token t) => t.Kind is
-        TokenKind.Int or TokenKind.Float or TokenKind.String or TokenKind.Char or TokenKind.Ident or TokenKind.True
+        TokenKind.Int or TokenKind.Float or TokenKind.String or TokenKind.Char or TokenKind.Temporal or TokenKind.Ident or TokenKind.True
         or TokenKind.False or TokenKind.Self or TokenKind.Super or TokenKind.LParen or TokenKind.LBracket
         or TokenKind.Minus or TokenKind.Bang or TokenKind.Amp or TokenKind.Tilde or TokenKind.Pipe
         or TokenKind.Pick or TokenKind.Grad or TokenKind.Intg or TokenKind.Sum or TokenKind.Prod
@@ -93,7 +93,7 @@ public sealed partial class Parser
                 case TokenKind.Dot:
                 {
                     Advance();
-                    var name = Expect(TokenKind.Ident, "a member name after '.'");
+                    var name = At(TokenKind.Init) || At(TokenKind.Deinit) ? Advance() : Expect(TokenKind.Ident, "a member name after '.'");
                     left = new MemberExpr(left, name.Text, name.Span, _src.Join(left.Span, name.Span));
                     continue;
                 }
@@ -184,6 +184,12 @@ public sealed partial class Parser
             case TokenKind.Char:
                 Advance();
                 return new CharLiteral((int)t.Value!, t.Span);
+            case TokenKind.Temporal:
+            {
+                Advance();
+                var tv = (TemporalValue)t.Value!;
+                return new TemporalLiteral(tv.Kind, tv.Value, t.Span);
+            }
             case TokenKind.True:
                 Advance();
                 return new BoolLiteral(true, t.Span);

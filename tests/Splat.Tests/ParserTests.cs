@@ -249,7 +249,7 @@ public class ParserStatementTests
     [Fact]
     public void ConstructsOfLaterMilestonesAreSkippedWithoutDerailingTheParse()
     {
-        var src = "class Dog from Animal with Talkable:\n fn bark(self):\n  if a:\n   x := 1\n  elif b:\n   x := 2\n  ;\n ;\n;\nafter := 1";
+        var src = "arena scratch:\n fn bark(self):\n  if a:\n   x := 1\n  elif b:\n   x := 2\n  ;\n ;\n;\nafter := 1";
         var (p, diag, _) = ParseHelper.Parse(src);
         Assert.Equal([DiagnosticCategory.NotYetBuilt], ParseHelper.Categories(diag));
         Assert.Equal(2, p.Statements.Count);
@@ -268,7 +268,7 @@ public class ParserStatementTests
     [Fact]
     public void ReservedLineStatementsSkipOnlyTheirLine()
     {
-        var (p, diag, _) = ParseHelper.Parse("drop x\ny := 1");
+        var (p, diag, _) = ParseHelper.Parse("imp x\ny := 1");
         Assert.Single(diag.Diagnostics);
         Assert.Equal(2, p.Statements.Count);
     }

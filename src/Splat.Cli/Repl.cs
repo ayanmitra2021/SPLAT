@@ -55,6 +55,7 @@ public sealed class Repl
                 if (_prompts) _output.WriteLine();
                 // End of input inside an unfinished entry: run it anyway so the missing ';' is reported.
                 if (pending.Length > 0) Submit(pending.ToString());
+                _session.Close();
                 return 0;
             }
 
@@ -64,7 +65,7 @@ public sealed class Repl
                 if (trimmed.Length == 0) continue;
                 if (trimmed[0] == ':')
                 {
-                    if (!Command(trimmed)) return 0;
+                    if (!Command(trimmed)) { _session.Close(); return 0; }
                     continue;
                 }
             }

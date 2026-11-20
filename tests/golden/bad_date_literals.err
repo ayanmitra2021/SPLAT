@@ -1,0 +1,28 @@
+[SE00006] 🤡 LITERALLY WRONG [Line 1]: d"2024-02-30" is not a real date: February 2024 has no day 30.
+  --> bad_date_literals.splat:1:6
+   |
+ 1 | x := d"2024-02-30"
+   |      ^^^^^^^^^^^^^
+  Fix: Write dates as d"yyyy-MM-dd".
+
+[SE00006] 🤡 LITERALLY WRONG [Line 2]: tm"25:00:00" is not a real time of day: there is no hour 25 on a 24-hour clock.
+  --> bad_date_literals.splat:2:6
+   |
+ 2 | y := tm"25:00:00"
+   |      ^^^^^^^^^^^^
+  Fix: Write times as tm"HH:mm:ss" on a 24-hour clock.
+
+[SE00006] 🤡 LITERALLY WRONG [Line 3]: t"2024-13-01T00:00:00Z" is not a real timestamp: there is no month 13.
+  --> bad_date_literals.splat:3:6
+   |
+ 3 | z := t"2024-13-01T00:00:00Z"
+   |      ^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Write timestamps as t"yyyy-MM-ddTHH:mm:ssZ".
+
+[SE00006] 🤡 LITERALLY WRONG [Line 4]: d"2024-1-1" is not a real date: a date is written yyyy-MM-dd, like d"2024-03-01".
+  --> bad_date_literals.splat:4:6
+   |
+ 4 | w := d"2024-1-1"
+   |      ^^^^^^^^^^^
+  Fix: Write dates as d"yyyy-MM-dd".
+

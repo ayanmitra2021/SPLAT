@@ -1,0 +1,28 @@
+[SE00411] 📜 BROKEN PROMISE [Line 10]: 'Rock' signed up for 'Walker' but never wrote: walk.
+  --> bad_traits.splat:10:7
+    |
+ 10 | class Rock with Walker:
+    |       ^^^^
+  Fix: Add the missing method(s) (walk) to 'Rock'.
+
+[SE00412] 🥊 CUSTODY BATTLE [Line 12]: 'move' is provided by both trait 'Swimmer' and trait 'Flyer', and I refuse to pick a favourite.
+  --> bad_traits.splat:12:7
+    |
+ 12 | class Duck with Swimmer, Flyer:
+    |       ^^^^
+  Fix: Define 'move' yourself to settle it (an explicit override wins), or remove one of the providers.
+
+[SE00412] 🥊 CUSTODY BATTLE [Line 23]: 'dup' is provided by both 'extend txt' and 'extend txt', and I refuse to pick a favourite.
+  --> bad_traits.splat:23:5
+    |
+ 23 |     fn dup(self)::txt = self + self
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Define 'dup' yourself to settle it (an explicit override wins), or remove one of the providers.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 18]: Tried to shove a 'Fish' into a 'Walker' slot. I'm strictly typed, bestie.
+  --> bad_traits.splat:18:7
+    |
+ 18 | print needs(Fish())
+    |       ^^^^^^^^^^^^^
+  Fix: Provide a value of type 'Walker', or change the declared type to 'Fish'.
+

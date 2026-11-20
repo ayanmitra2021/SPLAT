@@ -1,0 +1,62 @@
+# Phase 9: extend on built-ins and user classes, traits with defaults, bounded generics
+extend txt:
+    fn shout(self)::txt = self.upper() + "!!!"
+    fn twice(self)::txt = self + self
+;
+
+print "hi".shout()
+print "ab".twice().shout()
+
+trait Talkable:
+    fn name(self)::txt
+    fn talk(self)::txt = "{self.name()} says hello"
+;
+
+class Robot with Talkable:
+    id::i32 = 7
+    fn name(self)::txt = "R{self.id}"
+;
+
+class Parrot with Talkable:
+    fn name(self)::txt = "Polly"
+    fn talk(self)::txt = "Polly wants a cracker"
+;
+
+extend Robot:
+    fn beep(self)::txt = "{self.name()} beeps"
+;
+
+fn greet<T: Talkable>(x::T)::txt = x.talk()
+
+fn chorus(xs::List<Talkable>)::txt:
+    var out = ""
+    loop x in xs:
+        out = out + x.talk() + "; "
+    ;
+    ret out
+;
+
+r := Robot()
+p := Parrot()
+print greet(r)
+print greet(p)
+print r.beep()
+print chorus([r, p])
+
+trait Shouty:
+    fn loud(self)::txt = "LOUD"
+;
+extend i32 with Shouty:
+;
+print 5.loud()
+
+extend List<i32>:
+    fn total(self)::i32:
+        var t = 0
+        loop n in self:
+            t += n
+        ;
+        ret t
+    ;
+;
+print([1, 2, 3, 4].total())

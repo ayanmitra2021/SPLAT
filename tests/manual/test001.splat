@@ -11,3 +11,27 @@ fn splat_func(text::txt)::i32:
 ;
 
 print splat_func("hello its haloween!")
+
+class Orders:
+    secret oder_id::i64 = 0
+
+    fn init(self):
+        self.oder_id = (clock() - tm"00:00:00").ms() % 1000
+    ;
+    
+    fn get_oder_id(self)::i64:
+        ret self.oder_id
+    ;
+;
+
+class PurchaseOrders from Orders:
+    qty::f16
+    fn init(self, qt::f16):
+        self.qty = qt
+    ;
+    
+    fn printOrder(self)::txt = "Order {super.get_oder_id()} has {self.qty} quantity"
+;
+
+ord := PurchaseOrders(10.0)
+print ord.printOrder()

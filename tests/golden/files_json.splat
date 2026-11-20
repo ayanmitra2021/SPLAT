@@ -1,0 +1,59 @@
+# Phase 10: file I/O, auto-close, lazy lines, JSON, CSV
+path := "m2_files_tmp.txt"
+write(path, "alpha\nbeta\n")
+append(path, "gamma\n")
+print read(path)
+print exists(path)
+
+f := open(path, "r")
+loop line in f.lines():
+    print "line: {line}"
+;
+drop f
+
+fn count_lines(p::txt)::i32:
+    var n = 0
+    loop line in open(p, "r").lines():
+        n += 1
+        if n == 2:
+            br
+        ;
+    ;
+    ret n
+;
+print count_lines(path)
+
+out := open("m2_files_tmp2.txt", "w")
+out.write_line("hello")
+out.write("world")
+out.close()
+print read("m2_files_tmp2.txt")
+delete("m2_files_tmp2.txt")
+
+j := load_json("\{\"name\": \"splat\", \"tags\": [1, 2.5, true, null], \"nested\": \{\"k\": \"v\"}}")
+print j["name"]
+print j["nested"]["k"]
+print j["tags"].len()
+print j["tags"][1].as_f64()
+print j["name"].kind(), j["tags"].kind(), j["nested"].kind()
+print j.get("missing")
+print to_json(j)
+print to_json(map("a" => 1, "b" => 2))
+print to_json([1, 2, 3])
+print to_json(Got("x"))
+rt := load_json(to_json([("k", 1)]))
+print rt.len()
+
+save_csv("m2_tmp.csv", [[1.0, 2.5], [3.0, 4.0]])
+rows := load_csv("m2_tmp.csv")
+print rows
+print rows[1][0] + 1.0
+delete("m2_tmp.csv")
+
+try:
+    load_json("\{broken")
+catch e:
+    print e.kind
+;
+delete(path)
+print exists(path)

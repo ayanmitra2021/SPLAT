@@ -27,6 +27,11 @@ public class DiagnosticCodeTests
         Templates.ImmutableMutation(S, "x"), Templates.MutateWhileIterating(S, "xs"),
         Templates.VariantNotFound(S, "Maybe", "Oops"), Templates.WrongVariantArity(S, "Got", 1, 2),
         Templates.NotHashable(S, "f32"), Templates.BadTypeArgs(S, "Maybe", 1, 2), Templates.KeyNotFound(S, "\"k\""),
+        Templates.SecretAccess(S, "x", "C"), Templates.BadOverride(S, "m", "d"), Templates.SuperInitRequired(S, "C", "P"),
+        Templates.BadOverload(S, "%"), Templates.MissingTraitMethods(S, "C", "T", "m"), Templates.AmbiguousMember(S, "m", "A", "B"),
+        Templates.InheritanceCycle(S, "C"), Templates.UninitializedField(S, "C", "f"), Templates.SelfOutside(S, "self"),
+        Templates.ImmutableSelf(S, "m"), Templates.MissingRangeStep(S, "Time"), Templates.IoError(S, "w", "d"),
+        Templates.BadJson(S, "d"), Templates.TimeOverflow(S, "d"), Templates.NetworkFail(S, "u", "d"),
     ];
 
     [Fact]

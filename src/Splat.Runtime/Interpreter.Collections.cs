@@ -66,7 +66,7 @@ public sealed partial class Interpreter
         bool ok = v.Kind switch
         {
             VKind.F16 or VKind.F32 or VKind.F64 or VKind.Unit or VKind.List or VKind.Set or VKind.Map or VKind.Enum
-                or VKind.Range or VKind.Func or VKind.Chain => false,
+                or VKind.Range or VKind.Func or VKind.Chain or VKind.Object or VKind.Dur or VKind.Cal => false,
             VKind.Tuple => v.AsTuple.All(x => IsHashableValue(x)),
             _ => true,
         };
@@ -76,7 +76,7 @@ public sealed partial class Interpreter
     private static bool IsHashableValue(Value v) => v.Kind switch
     {
         VKind.F16 or VKind.F32 or VKind.F64 or VKind.Unit or VKind.List or VKind.Set or VKind.Map or VKind.Enum
-            or VKind.Range or VKind.Func or VKind.Chain => false,
+            or VKind.Range or VKind.Func or VKind.Chain or VKind.Object or VKind.Dur or VKind.Cal => false,
         VKind.Tuple => v.AsTuple.All(IsHashableValue),
         _ => true,
     };
@@ -116,6 +116,10 @@ public sealed partial class Interpreter
         var idx = Eval(ix.Indices[0], env);
         switch (target.Kind)
         {
+            case VKind.Object:
+                if (target.AsObj is JsonObj jo) return IndexJson(jo, idx, ix.Span);
+                CheckAlive(target.AsObj, ix.Target);
+                return CallUserMethod(target, "op []", [idx], ix.Span);
             case VKind.List when idx.Kind == VKind.Range:
             {
                 var items = target.AsList.Items;
@@ -188,13 +192,46 @@ public sealed partial class Interpreter
 
     // ---- methods of the built-in collections ----
 
+    private static bool IsBuiltinCollectionMethod(VKind kind, string name) => (kind, name) is
+        (VKind.List, "push" or "pop" or "insert" or "remove" or "len") or (VKind.Set, "add" or "remove" or "len")
+        or (VKind.Map, "get" or "remove" or "len") or (VKind.Txt, "upper" or "lower" or "trim" or "len" or "split" or "lines");
+
     private Value CallMethod(CallExpr c, MemberExpr m, Env env)
     {
+        if (m.Target is NameExpr { Name: "super" }) return CallSuper(c, m, env);
+        if (m.Target is NameExpr tn && env.Find(tn.Name) is null && NativeMembers.StaticsOf(tn.Name) is not null)
+            return CallStatic(tn.Name, m.Name, c, env);
+
         var recv = Eval(m.Target, env);
+        if (recv.Kind == VKind.Object) return CallObjectMethod(c, m, recv, env);
+        if (recv.IsTemporal || recv.Kind is VKind.Date or VKind.Time or VKind.Stamp)
+        {
+            if (FindUserMethod(recv, m.Name) is null) return TemporalMethod(recv, m.Name, c.Span);
+        }
+        if (!IsBuiltinCollectionMethod(recv.Kind, m.Name)) return CallExtMethod(c, m, recv, env);
         var args = c.Args.Select(a => EvalOwned(a.Value, env)).ToArray();
 
         switch (recv.Kind, m.Name)
         {
+            case (VKind.Txt, "upper"): return Value.Str(recv.AsString.ToUpperInvariant());
+            case (VKind.Txt, "lower"): return Value.Str(recv.AsString.ToLowerInvariant());
+            case (VKind.Txt, "trim"): return Value.Str(recv.AsString.Trim());
+            case (VKind.Txt, "len"): return Value.Int(VKind.Usize, recv.AsString.EnumerateRunes().Count());
+            case (VKind.Txt, "split"):
+            {
+                var parts = new SplatList();
+                foreach (var p in recv.AsString.Split(args[0].AsString, StringSplitOptions.None)) parts.Items.Add(Value.Str(p));
+                return Value.List(parts);
+            }
+            case (VKind.Txt, "lines"):
+            {
+                var ls = new SplatList();
+                foreach (var l in recv.AsString.Split('\n')) ls.Items.Add(Value.Str(l.TrimEnd('\r')));
+                return Value.List(ls);
+            }
+            case (VKind.List, "len"): return Value.Int(VKind.Usize, recv.AsList.Items.Count);
+            case (VKind.Set, "len"): return Value.Int(VKind.Usize, recv.AsSet.Count);
+            case (VKind.Map, "len"): return Value.Int(VKind.Usize, recv.AsMap.Count);
             case (VKind.List, "push"):
                 recv.AsList.Items.Add(args[0]);
                 return Value.Unit;
@@ -273,7 +310,8 @@ public static class ValueEquality
         switch (a.Kind)
         {
             case VKind.F16 or VKind.F32 or VKind.F64: return a.AsDouble == b.AsDouble; // NaN is not equal to itself
-            case VKind.Bool or VKind.Char: return a.Bits == b.Bits;
+            case VKind.Bool or VKind.Char or VKind.Date or VKind.Time or VKind.Stamp or VKind.Dur or VKind.Cal: return a.Bits == b.Bits;
+            case VKind.Object: return ReferenceEquals(a.Ref, b.Ref);
             case VKind.Unit: return true;
             case VKind.Txt: return string.Equals(a.AsString, b.AsString, StringComparison.Ordinal);
             case VKind.Tuple:

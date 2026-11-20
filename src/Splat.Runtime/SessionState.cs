@@ -45,9 +45,17 @@ public sealed class SessionState
     /// <summary>Names bound at the top level of the session (variables and functions), sorted.</summary>
     public IReadOnlyList<string> Names => _env.AllNames().Order(StringComparer.Ordinal).ToList();
 
+    /// <summary>Ends the session: destroys (deinit, close) whatever the session's variables still own.</summary>
+    public void Close()
+    {
+        _interpreter.CloseSession(_env);
+        _interpreter.StopServers();
+    }
+
     /// <summary>Forgets every binding and function.</summary>
     public void Reset()
     {
+        _interpreter.CloseSession(_env);
         _info = new TypeInfo();
         _scope = new Scope();
         _moods = EnumRegistry.Builtin;
@@ -72,7 +80,7 @@ public sealed class SessionState
 
         var entryEnv = new Env(_env);
         var snapshot = _env.SnapshotMutable();
-        if (!_interpreter.Execute(program, entryEnv, diag, out var last))
+        if (!_interpreter.Execute(program, entryEnv, diag, out var last, keepScope: true))
         {
             Env.Restore(snapshot);
             return new EvalResult(RunOutcome.RuntimeError, diag, null);

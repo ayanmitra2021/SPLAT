@@ -1,0 +1,56 @@
+# Phase 8: classes, inheritance, super, virtual dispatch, deinit order
+class Animal:
+    name::txt
+    age::i32 = 1
+
+    fn init(self, name::txt):
+        self.name = name
+        print "Animal.init {name}"
+    ;
+
+    fn speak(self)::txt = "{self.name} makes a sound"
+
+    fn describe(self)::txt = "{self.name} (age {self.age}): {self.speak()}"
+
+    fn birthday(~self):
+        self.age += 1
+    ;
+
+    fn deinit(self):
+        print "Animal.deinit {self.name}"
+    ;
+;
+
+class Dog from Animal:
+    tricks::List<txt> = []
+
+    fn init(self, name::txt, trick::txt):
+        super.init(name)
+        self.tricks.push(trick)
+        print "Dog.init {name}"
+    ;
+
+    fn speak(self)::txt = "{self.name} says Woof, then {super.speak()}"
+
+    fn deinit(self):
+        print "Dog.deinit {self.name}"
+    ;
+;
+
+class Puppy from Dog:
+    fn speak(self)::txt = "{self.name} yips"
+;
+
+fn show(a::Animal):
+    print a.describe()
+;
+
+var d = Dog("Rex", "sit")
+d.birthday()
+print d.describe()
+p := Puppy("Bit", "roll")
+show(p)
+show(d)
+a := Animal("Generic")
+print a.speak()
+print "end of program"

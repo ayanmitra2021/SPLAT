@@ -1,0 +1,15 @@
+Animal.init Rex
+Dog.init Rex
+Rex (age 2): Rex says Woof, then Rex makes a sound
+Animal.init Bit
+Dog.init Bit
+Bit (age 1): Bit yips
+Rex (age 2): Rex says Woof, then Rex makes a sound
+Animal.init Generic
+Generic makes a sound
+end of program
+Animal.deinit Generic
+Dog.deinit Bit
+Animal.deinit Bit
+Dog.deinit Rex
+Animal.deinit Rex

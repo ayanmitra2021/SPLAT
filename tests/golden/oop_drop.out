@@ -1,0 +1,20 @@
+open a
+open b
+in scoped
+close b
+close a
+open x
+made x
+moved x into y
+open z
+close z
+dropped z
+open field-1
+open field-2
+open temp
+close temp
+end
+holder going away
+close field-2
+close field-1
+close x

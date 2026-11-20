@@ -1,0 +1,26 @@
+alpha
+beta
+gamma
+
+true
+line: alpha
+line: beta
+line: gamma
+2
+hello
+world
+"splat"
+"v"
+4
+Got(2.5)
+text list object
+Nada
+{"name":"splat","tags":[1,2.5,true,null],"nested":{"k":"v"}}
+{"a":1,"b":2}
+[1,2,3]
+"x"
+1
+[[1.0, 2.5], [3.0, 4.0]]
+4.0
+BadJson
+false

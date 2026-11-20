@@ -85,7 +85,7 @@ public static class SourceFormatter
             case EnumDecl m:
                 sb.Append("enum ").Append(m.Name);
                 if (m.Generics.Count > 0)
-                    sb.Append('<').Append(string.Join(", ", m.Generics.Select(g => g.IsDim ? "$" + g.Name : g.Bound is null ? g.Name : g.Name + ": " + g.Bound))).Append('>');
+                    sb.Append('<').Append(string.Join(", ", m.Generics.Select(GenericText))).Append('>');
                 sb.Append(":\n");
                 for (int i = 0; i < m.Variants.Count; i++)
                 {
@@ -102,6 +102,57 @@ public static class SourceFormatter
                 sb.Append(tb.IsMutable ? "var " : "").Append('(').Append(string.Join(", ", tb.Names)).Append(')')
                   .Append(tb.IsMutable ? " = " : " := ").Append(Expr(tb.Value)).Append('\n');
                 break;
+            case ClassDecl c:
+                sb.Append("class ").Append(c.Name);
+                if (c.Generics.Count > 0) sb.Append('<').Append(string.Join(", ", c.Generics.Select(GenericText))).Append('>');
+                if (c.Parent is not null) sb.Append(" from ").Append(Type(c.Parent));
+                if (c.Traits.Count > 0) sb.Append(" with ").Append(string.Join(", ", c.Traits.Select(Type)));
+                sb.Append(":\n");
+                foreach (var f in c.Fields)
+                {
+                    Indent(sb, level + 1);
+                    if (f.IsSecret) sb.Append("secret ");
+                    sb.Append(f.Name).Append("::").Append(Type(f.Type));
+                    if (f.Default is not null) sb.Append(" = ").Append(Expr(f.Default));
+                    sb.Append('\n');
+                }
+                foreach (var m in c.Methods)
+                {
+                    Indent(sb, level + 1);
+                    if (m.IsSecret) sb.Append("secret ");
+                    Fn(sb, m.Fn, level + 1);
+                }
+                Indent(sb, level);
+                sb.Append(";\n");
+                break;
+            case TraitDecl t:
+                sb.Append("trait ").Append(t.Name);
+                if (t.Generics.Count > 0) sb.Append('<').Append(string.Join(", ", t.Generics.Select(GenericText))).Append('>');
+                sb.Append(":\n");
+                foreach (var m in t.Methods) { Indent(sb, level + 1); Fn(sb, m, level + 1); }
+                Indent(sb, level);
+                sb.Append(";\n");
+                break;
+            case ExtendDecl x:
+                sb.Append("extend ").Append(Type(x.Target));
+                if (x.Trait is not null) sb.Append(" with ").Append(Type(x.Trait));
+                sb.Append(":\n");
+                foreach (var m in x.Methods) { Indent(sb, level + 1); Fn(sb, m, level + 1); }
+                Indent(sb, level);
+                sb.Append(";\n");
+                break;
+            case DropStmt d:
+                sb.Append("drop ").Append(Expr(d.Target)).Append('\n');
+                break;
+            case TryStmt t:
+                sb.Append("try");
+                Body(sb, t.Body, level);
+                Indent(sb, level);
+                sb.Append("catch ").Append(t.CatchName);
+                Body(sb, t.Handler, level);
+                Indent(sb, level);
+                sb.Append(";\n");
+                break;
             case ReservedStmt r:
                 sb.Append("# (skipped ").Append(r.Keyword).Append(" construct)\n");
                 break;
@@ -116,8 +167,7 @@ public static class SourceFormatter
         sb.Append("fn ").Append(c.OpSymbol is null ? c.Name : "op " + c.OpSymbol);
         if (c.Generics.Count > 0)
         {
-            sb.Append('<').Append(string.Join(", ", c.Generics.Select(g =>
-                g.IsDim ? "$" + g.Name : g.Bound is null ? g.Name : g.Name + ": " + g.Bound))).Append('>');
+            sb.Append('<').Append(string.Join(", ", c.Generics.Select(GenericText))).Append('>');
         }
         sb.Append('(').Append(string.Join(", ", c.Params.Select(Param))).Append(')');
         if (c.ReturnType is not null) sb.Append("::").Append(Type(c.ReturnType));
@@ -126,10 +176,14 @@ public static class SourceFormatter
             sb.Append(" = ").Append(Expr(c.ExprBody)).Append('\n');
             return;
         }
-        Body(sb, c.BlockBody!, level);
+        if (c.BlockBody is null) { sb.Append('\n'); return; } // a required trait method
+        Body(sb, c.BlockBody, level);
         Indent(sb, level);
         sb.Append(";\n");
     }
+
+    private static string GenericText(GenericParam g) =>
+        g.IsDim ? "$" + g.Name : g.Bound is null ? g.Name : g.Name + ": " + Type(g.Bound);
 
     private static string Param(Param p) => p.Kind switch
     {
@@ -192,6 +246,7 @@ public static class SourceFormatter
             case BoolLiteral b: return b.Value ? "true" : "false";
             case UnitLiteral: return "()";
             case StringTemplate s: return Template(s);
+            case TemporalLiteral t: return AstPrinter.TemporalText(t);
             case NameExpr n: return n.Name;
             case UnaryExpr u: return AstPrinter.OpText(u.Op) + Wrap(u.Operand, Prec(u.Operand) < Parser.PrecUnary);
             case PostfixExpr p: return Wrap(p.Operand, Prec(p.Operand) < Parser.PrecPostfix) + AstPrinter.OpText(p.Op);

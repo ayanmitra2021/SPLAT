@@ -1,0 +1,42 @@
+[SE00116] ⏱️ STEP REQUIRED [Line 1]: A range of 'Time' needs 'by'; a Time has no natural step.
+  --> bad_time.splat:1:11
+   |
+ 1 | loop t in tm"09:00:00"..tm"10:00:00":
+   |           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Add a step, for example 'by 15m' (Time), 'by 1h' (Stamp).
+
+[SE00106] 🤹 WRONG TOOL [Line 4]: '+' has no idea what to do with a 'Date' and a 'Stamp'.
+  --> bad_time.splat:4:6
+   |
+ 4 | z := d"2024-01-01" + t"2024-01-01T00:00:00Z"
+   |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Two points in time cannot be added; subtract them to get a Dur.
+
+[SE00106] 🤹 WRONG TOOL [Line 5]: '+' has no idea what to do with a 'Cal' and a 'Time'.
+  --> bad_time.splat:5:6
+   |
+ 5 | w := 1mo + tm"01:00:00"
+   |      ^^^^^^^^^^^^^^^^^^
+  Fix: A Cal (months, years) only works with a Date or a Stamp; a Time of day has no calendar.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 6]: Tried to shove a 'Stamp' into a 'Date (both ends of a range must be the same kind of point in time)' slot. I'm strictly typed, bestie.
+  --> bad_time.splat:6:26
+   |
+ 6 | loop d in d"2024-01-01"..t"2024-01-02T00:00:00Z" by 1d:
+   |                          ^^^^^^^^^^^^^^^^^^^^^^^
+  Fix: Provide a value of type 'Date (both ends of a range must be the same kind of point in time)', or change the declared type to 'Stamp'.
+
+[SE00100] 🎭 IDENTITY CRISIS [Line 9]: Tried to shove a '1h' into a 'a whole number of days (like 1d or 1w), or a Cal step; a Date has no hours' slot. I'm strictly typed, bestie.
+  --> bad_time.splat:9:43
+   |
+ 9 | loop d in d"2024-01-01"..d"2024-01-05" by 1h:
+   |                                           ^^
+  Fix: Provide a value of type 'a whole number of days (like 1d or 1w), or a Cal step; a Date has no hours', or change the declared type to '1h'.
+
+[SE00106] 🤹 WRONG TOOL [Line 12]: '+' has no idea what to do with a 'i32' and a 'Dur'.
+  --> bad_time.splat:12:6
+    |
+ 12 | n := 5 + 1h
+    |      ^^^^^^
+  Fix: Dates and times add and subtract lengths (Dur, Cal) and subtract each other (giving a Dur); lengths also scale by integers.
+

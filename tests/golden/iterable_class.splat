@@ -1,0 +1,47 @@
+# Phase 9: a class implementing Iterable<T> works in loop, chains, enumerate, zip and in
+class Countdown with Iterable<i32>:
+    n::i32
+
+    fn init(self, start::i32):
+        self.n = start
+    ;
+
+    fn next(~self)::i32?:
+        if self.n <= 0:
+            ret Nada
+        ;
+        v := self.n
+        self.n -= 1
+        ret Got(v)
+    ;
+;
+
+loop x in Countdown(3):
+    print "tick {x}"
+;
+
+loop x in Countdown(2) then 10..12:
+    print "chain {x}"
+;
+
+loop i, x in enumerate(Countdown(2)):
+    print "{i}: {x}"
+;
+
+loop p in zip(Countdown(3), "ab"):
+    print p
+;
+
+print 2 in Countdown(5)
+print 9 in Countdown(5)
+
+fn sum_all<I: Iterable<i32>>(it::I)::i32:
+    var t = 0
+    loop v in it:
+        t += v
+    ;
+    ret t
+;
+print sum_all(Countdown(4))
+print sum_all(1..5)
+print sum_all([10, 20])

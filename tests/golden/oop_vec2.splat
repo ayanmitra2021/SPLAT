@@ -1,0 +1,52 @@
+# Phase 8: operator overloading and generic classes
+class Vec2:
+    x::f32
+    y::f32
+
+    fn init(self, x::f32, y::f32):
+        self.x = x
+        self.y = y
+    ;
+
+    fn op +(self, other::Vec2)::Vec2 = Vec2(self.x + other.x, self.y + other.y)
+    fn op -(self, other::Vec2)::Vec2 = Vec2(self.x - other.x, self.y - other.y)
+    fn op *(self, k::f32)::Vec2 = Vec2(self.x * k, self.y * k)
+    fn op ==(self, other::Vec2)::bool = self.x == other.x and self.y == other.y
+    fn op <(self, other::Vec2)::bool = self.x < other.x
+    fn op [](self, i::usize)::f32:
+        if i == 0:
+            ret self.x
+        ;
+        ret self.y
+    ;
+
+    fn show(self)::txt = "({self.x}, {self.y})"
+;
+
+a := Vec2(1.0, 2.0)
+b := Vec2(3.0, 4.5)
+print((a + b).show())
+print((b - a).show())
+print((a * 2.0).show())
+print a == Vec2(1.0, 2.0)
+print a != b
+print a < b
+print b[0], b[1]
+var c = a
+c += b
+print c.show()
+
+class Box<T>:
+    value::T
+
+    fn init(self, value::T):
+        self.value = value
+    ;
+
+    fn get(self)::T = self.value
+;
+
+n := Box(41)
+print n.get() + 1
+s := Box("hi")
+print s.get()

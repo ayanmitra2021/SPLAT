@@ -1,0 +1,3 @@
+print "before"
+print read("definitely_not_here.txt")
+print "after"

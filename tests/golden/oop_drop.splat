@@ -1,0 +1,42 @@
+# Phase 8: deinit ordering, drop, moves, returned objects
+class Res:
+    id::txt
+    fn init(self, id::txt):
+        self.id = id
+        print "open {id}"
+    ;
+    fn deinit(self):
+        print "close {self.id}"
+    ;
+;
+
+class Holder:
+    first::Res = Res("field-1")
+    second::Res = Res("field-2")
+    fn deinit(self):
+        print "holder going away"
+    ;
+;
+
+fn make(id::txt)::Res:
+    r := Res(id)
+    print "made {id}"
+    ret r
+;
+
+fn scoped():
+    a := Res("a")
+    b := Res("b")
+    print "in scoped"
+;
+
+scoped()
+x := make("x")
+y := x
+print "moved x into y"
+z := Res("z")
+drop z
+print "dropped z"
+h := Holder()
+Res("temp")
+print "end"

@@ -131,7 +131,7 @@ public enum ParamKind { Normal, Self, PeekSelf, PokeSelf }
 public sealed record Param(ParamKind Kind, string Name, TypeRef? Type, Expr? Default, SourceSpan Span) : Node(Span);
 
 /// <summary>Generic parameter: <c>$R</c> (dimension variable), <c>T</c>, or <c>T: Trait</c>.</summary>
-public sealed record GenericParam(string Name, bool IsDim, string? Bound, SourceSpan Span) : Node(Span);
+public sealed record GenericParam(string Name, bool IsDim, TypeRef? Bound, SourceSpan Span) : Node(Span);
 
 /// <summary>
 /// <c>fn name&lt;G&gt;(params)::R = expr</c> or <c>: ... ;</c>. For an operator overload, <see cref="OpSymbol"/> holds the
@@ -211,3 +211,39 @@ public sealed record TupleExpr(IReadOnlyList<Expr> Items, SourceSpan Span) : Exp
 
 /// <summary>Tuple destructuring bind: <c>(k, v) := expr</c>.</summary>
 public sealed record TupleBindStmt(IReadOnlyList<string> Names, Expr Value, bool IsMutable, SourceSpan Span) : Stmt(Span);
+
+// ---- Phases 8-10: classes, traits, extend, drop, try, temporal literals ----
+
+/// <summary>A field of a class: <c>[secret] name::Type [= default]</c>.</summary>
+public sealed record FieldDecl(string Name, SourceSpan NameSpan, TypeRef Type, Expr? Default, bool IsSecret, SourceSpan Span) : Node(Span);
+
+/// <summary>A method of a class: a <c>fn</c> declaration, optionally marked <c>secret</c>.</summary>
+public sealed record MethodMember(FnDecl Fn, bool IsSecret, SourceSpan Span) : Node(Span);
+
+/// <summary><c>class Name&lt;G&gt; from Parent with Trait, Trait2: fields and methods ;</c></summary>
+public sealed record ClassDecl(
+    string Name, SourceSpan NameSpan, IReadOnlyList<GenericParam> Generics, TypeRef? Parent, IReadOnlyList<TypeRef> Traits,
+    IReadOnlyList<FieldDecl> Fields, IReadOnlyList<MethodMember> Methods, SourceSpan Span) : Stmt(Span);
+
+/// <summary>
+/// <c>trait Name&lt;G&gt;: methods ;</c>. A method with neither <c>=</c> nor a block body is a required signature;
+/// one with a body is a default implementation.
+/// </summary>
+public sealed record TraitDecl(string Name, SourceSpan NameSpan, IReadOnlyList<GenericParam> Generics, IReadOnlyList<FnDecl> Methods, SourceSpan Span) : Stmt(Span);
+
+/// <summary><c>extend Type [with Trait]: methods ;</c></summary>
+public sealed record ExtendDecl(TypeRef Target, TypeRef? Trait, IReadOnlyList<FnDecl> Methods, SourceSpan Span) : Stmt(Span);
+
+/// <summary><c>drop x</c>: run <c>deinit</c> now and end the variable's life.</summary>
+public sealed record DropStmt(Expr Target, SourceSpan Span) : Stmt(Span);
+
+/// <summary><c>try: ... catch e: ... ;</c></summary>
+public sealed record TryStmt(Block Body, string CatchName, SourceSpan CatchNameSpan, Block Handler, SourceSpan Span) : Stmt(Span);
+
+public enum TemporalKind { Date, Time, Stamp, Dur, Cal }
+
+/// <summary>
+/// A date/time literal: <c>d"2024-03-01"</c> (days since 1970-01-01), <c>tm"09:30:00"</c> (ns since midnight),
+/// <c>t"2024-03-01T10:15:00Z"</c> (ns since the epoch, UTC), <c>15m</c> (Dur, ns) or <c>1mo</c> (Cal, months).
+/// </summary>
+public sealed record TemporalLiteral(TemporalKind Kind, long Value, SourceSpan Span) : Expr(Span);
